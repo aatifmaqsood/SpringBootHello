@@ -1,0 +1,30 @@
+import json
+import boto3
+
+def evaluate_compliance(configuration_item):
+    s3 = boto3.client('s3')
+    
+    bucket_name = configuration_item['resourceName']
+    try:
+        lifecycle = s3.get_bucket_lifecycle_configuration(Bucket=bucket_name)
+        return 'COMPLIANT'
+    except s3.exceptions.NoSuchLifecycleConfiguration:
+        return 'NON_COMPLIANT'
+
+def lambda_handler(event, context):
+    invoking_event = json.loads(event['invokingEvent'])
+    configuration_item = invoking_event['configurationItem']
+    compliance_type = evaluate_compliance(configuration_item)
+    
+    config = boto3.client('config')
+    config.put_evaluations(
+        Evaluations=[
+            {
+                'ComplianceResourceType': configuration_item['resourceType'],
+                'ComplianceResourceId': configuration_item['resourceId'],
+                'ComplianceType': compliance_type,
+                'OrderingTimestamp': configuration_item['configurationItemCaptureTime']
+            },
+        ],
+        ResultToken=event['resultToken']
+    )
