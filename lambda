@@ -1,1 +1,105 @@
 
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AWS Config Rules to ensure S3 buckets have retention policy and KMS key attached.
+
+Resources:
+  # Lambda function for custom rule
+  RetentionPolicyCheckFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Handler: index.lambda_handler
+      Role: !GetAtt RetentionPolicyCheckFunctionRole.Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          
+          def evaluate_compliance(configuration_item):
+              s3 = boto3.client('s3')
+              
+              bucket_name = configuration_item['resourceName']
+              try:
+                  lifecycle = s3.get_bucket_lifecycle_configuration(Bucket=bucket_name)
+                  return 'COMPLIANT'
+              except s3.exceptions.NoSuchLifecycleConfiguration:
+                  return 'NON_COMPLIANT'
+          
+          def lambda_handler(event, context):
+              invoking_event = json.loads(event['invokingEvent'])
+              configuration_item = invoking_event['configurationItem']
+              compliance_type = evaluate_compliance(configuration_item)
+              
+              config = boto3.client('config')
+              config.put_evaluations(
+                  Evaluations=[
+                      {
+                          'ComplianceResourceType': configuration_item['resourceType'],
+                          'ComplianceResourceId': configuration_item['resourceId'],
+                          'ComplianceType': compliance_type,
+                          'OrderingTimestamp': configuration_item['configurationItemCaptureTime']
+                      },
+                  ],
+                  ResultToken=event['resultToken']
+              )
+      Runtime: 'python3.8'
+      Timeout: 300
+
+  RetentionPolicyCheckFunctionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'lambda.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: 'LambdaS3ConfigPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 's3:GetBucketLifecycleConfiguration'
+                Resource: '*'
+              - Effect: 'Allow'
+                Action:
+                  - 'config:PutEvaluations'
+                Resource: '*'
+
+  RetentionPolicyConfigRule:
+    Type: 'AWS::Config::ConfigRule'
+    Properties:
+      ConfigRuleName: 's3-bucket-retention-policy-check'
+      Scope:
+        ComplianceResourceTypes:
+          - 'AWS::S3::Bucket'
+      Source:
+        Owner: 'CUSTOM_LAMBDA'
+        SourceIdentifier: !GetAtt RetentionPolicyCheckFunction.Arn
+      InputParameters: '{}'
+      MaximumExecutionFrequency: 'TwentyFour_Hours'
+
+  KmsEncryptionConfigRule:
+    Type: 'AWS::Config::ConfigRule'
+    Properties:
+      ConfigRuleName: 's3-bucket-kms-encryption-check'
+      Source:
+        Owner: 'AWS'
+        SourceIdentifier: 'S3_BUCKET_SERVER_SIDE_ENCRYPTION_ENABLED'
+      Scope:
+        ComplianceResourceTypes:
+          - 'AWS::S3::Bucket'
+      InputParameters: '{"s3BucketEncryptionAlgorithm":"aws:kms"}'
+      MaximumExecutionFrequency: 'TwentyFour_Hours'
+
+Outputs:
+  RetentionPolicyConfigRule:
+    Description: 'Custom Config Rule to check S3 bucket retention policy'
+    Value: !Ref RetentionPolicyConfigRule
+
+  KmsEncryptionConfigRule:
+    Description: 'Managed Config Rule to check S3 bucket KMS encryption'
+    Value: !Ref KmsEncryptionConfigRule
