@@ -1,17 +1,64 @@
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "s3:ListBucket",
-                "s3:GetObject",
-                "s3:PutObject"
-            ],
-            "Resource": [
-                "arn:aws:s3:::your-bucket-name",
-                "arn:aws:s3:::your-bucket-name/*"
-            ]
-        }
-    ]
-}
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CloudFormation template to create an IAM policy that grants read, list, 
+  and update access to an S3 bucket if the bucket name is provided.
+
+Parameters:
+  BucketName:
+    Description: The name of the S3 bucket.
+    Type: String
+    Default: ""
+    AllowedPattern: "^[a-zA-Z0-9.\-_]{1,255}$"
+    ConstraintDescription: The bucket name must be a valid S3 bucket name.
+
+Resources:
+  S3AccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties: 
+      PolicyName: S3AccessPolicy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:PutObject
+            Resource: 
+              - !Sub "arn:aws:s3:::${BucketName}"
+              - !Sub "arn:aws:s3:::${BucketName}/*"
+      Roles: 
+        - !Ref IAMRole
+
+  IAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:PutObject
+                Resource:
+                  - !Sub "arn:aws:s3:::${BucketName}"
+                  - !Sub "arn:aws:s3:::${BucketName}/*"
+      Condition: 
+        !Not [!Equals [!Ref BucketName, ""]]
+Outputs:
+  RoleName:
+    Description: The name of the IAM role created.
+    Value: !Ref IAMRole
