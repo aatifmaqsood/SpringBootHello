@@ -1,64 +1,82 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  CloudFormation template to create an IAM policy that grants read, list, 
-  and update access to an S3 bucket if the bucket name is provided.
-
-Parameters:
-  BucketName:
-    Description: The name of the S3 bucket.
-    Type: String
-    Default: ""
-    AllowedPattern: "^[a-zA-Z0-9.\-_]{1,255}$"
-    ConstraintDescription: The bucket name must be a valid S3 bucket name.
+Description: Grant read and write access to S3 bucket and KMS key for team B
 
 Resources:
-  S3AccessPolicy:
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: ${AWS_CUSTOM_DATA_BUCKET}
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowReadWriteAccessForTeamB
+            Effect: Allow
+            Principal:
+              AWS: arn:aws:iam::${AWS::AccountId}:role/TeamBRole
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+            Resource:
+              - arn:aws:s3:::${AWS_CUSTOM_DATA_BUCKET}
+              - arn:aws:s3:::${AWS_CUSTOM_DATA_BUCKET}/*
+
+  KMSKeyPolicy:
+    Type: AWS::KMS::Key
+    Properties:
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: key-policy
+        Statement:
+          - Sid: AllowTeamBUseOfKey
+            Effect: Allow
+            Principal:
+              AWS: arn:aws:iam::${AWS::AccountId}:role/TeamBRole
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+          - Sid: AllowS3BucketUseOfKey
+            Effect: Allow
+            Principal:
+              AWS: arn:aws:iam::${AWS::AccountId}:role/TeamBRole
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: '*'
+            Condition:
+              StringEquals:
+                kms:ViaService: s3.YOUR_REGION.amazonaws.com
+                kms:CallerAccount: ACCOUNT_ID_A
+
+  AppIAMPolicy:
     Type: AWS::IAM::Policy
-    Properties: 
-      PolicyName: S3AccessPolicy
+    Properties:
+      PolicyName: customDataIamPolicy
+      Roles:
+        - TeamBRole
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Action:
               - s3:GetObject
-              - s3:ListBucket
               - s3:PutObject
-            Resource: 
-              - !Sub "arn:aws:s3:::${BucketName}"
-              - !Sub "arn:aws:s3:::${BucketName}/*"
-      Roles: 
-        - !Ref IAMRole
-
-  IAMRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
+              - s3:ListBucket
+            Resource:
+              - arn:aws:s3:::${AWS::AccountId}
+              - arn:aws:s3:::${AWS::AccountId}/*
           - Effect: Allow
-            Principal:
-              Service:
-                - ec2.amazonaws.com
             Action:
-              - sts:AssumeRole
-      Path: /
-      Policies:
-        - PolicyName: S3AccessPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:ListBucket
-                  - s3:PutObject
-                Resource:
-                  - !Sub "arn:aws:s3:::${BucketName}"
-                  - !Sub "arn:aws:s3:::${BucketName}/*"
-      Condition: 
-        !Not [!Equals [!Ref BucketName, ""]]
-Outputs:
-  RoleName:
-    Description: The name of the IAM role created.
-    Value: !Ref IAMRole
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: arn:aws:kms:YOUR_REGION:ACCOUNT_ID_A:key/KMS_KEY_ID
