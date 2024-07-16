@@ -1,82 +1,34 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: Grant read and write access to S3 bucket and KMS key for team B
-
-Resources:
-  S3BucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket: ${AWS_CUSTOM_DATA_BUCKET}
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: AllowReadWriteAccessForTeamB
+- Sid: S3JobFlowPermissions
             Effect: Allow
-            Principal:
-              AWS: arn:aws:iam::${AWS::AccountId}:role/TeamBRole
             Action:
-              - s3:GetObject
+              - s3:ListBucket*
+              - s3:GetObject*
+              - s3:GetBucket*
+              - s3:GetAccelerateConfiguration
+              - s3:GetLifecycleConfiguration
+              - s3:ListMultipartUploadParts
               - s3:PutObject
-              - s3:ListBucket
-            Resource:
-              - arn:aws:s3:::${AWS_CUSTOM_DATA_BUCKET}
-              - arn:aws:s3:::${AWS_CUSTOM_DATA_BUCKET}/*
-
-  KMSKeyPolicy:
-    Type: AWS::KMS::Key
-    Properties:
-      KeyPolicy:
-        Version: '2012-10-17'
-        Id: key-policy
-        Statement:
-          - Sid: AllowTeamBUseOfKey
-            Effect: Allow
-            Principal:
-              AWS: arn:aws:iam::${AWS::AccountId}:role/TeamBRole
-            Action:
-              - kms:Encrypt
-              - kms:Decrypt
-              - kms:ReEncrypt*
-              - kms:GenerateDataKey*
-              - kms:DescribeKey
+              - s3:PutObjectTagging
+              - s3:PutObjectVersionTagging
+              - s3:PutAccelerateConfiguration
+              - s3:PutLifecycleConfiguration
+              - s3:Replicate*
+              - s3:RestoreObject
+              - s3:DeleteObject*
             Resource: '*'
-          - Sid: AllowS3BucketUseOfKey
+          - Sid: S3CustomBucketPermissions
             Effect: Allow
-            Principal:
-              AWS: arn:aws:iam::${AWS::AccountId}:role/TeamBRole
             Action:
-              - kms:Encrypt
-              - kms:Decrypt
-              - kms:ReEncrypt*
-              - kms:GenerateDataKey*
-              - kms:DescribeKey
-            Resource: '*'
-            Condition:
-              StringEquals:
-                kms:ViaService: s3.YOUR_REGION.amazonaws.com
-                kms:CallerAccount: ACCOUNT_ID_A
-
-  AppIAMPolicy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: customDataIamPolicy
-      Roles:
-        - TeamBRole
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Action:
-              - s3:GetObject
-              - s3:PutObject
-              - s3:ListBucket
+              - 's3:ListBucket'
+              - 's3:GetObject'
+              - 's3:PutObject'
             Resource:
-              - arn:aws:s3:::${AWS::AccountId}
-              - arn:aws:s3:::${AWS::AccountId}/*
-          - Effect: Allow
+              - !Sub 'arn:aws:s3:::${S3BucketName}'
+              - !Sub 'arn:aws:s3:::${S3BucketName}/*'
+          - Sid: KMSPermissions
+            Effect: Allow
             Action:
-              - kms:Encrypt
-              - kms:Decrypt
-              - kms:ReEncrypt*
-              - kms:GenerateDataKey*
-              - kms:DescribeKey
-            Resource: arn:aws:kms:YOUR_REGION:ACCOUNT_ID_A:key/KMS_KEY_ID
+              - 'kms:Decrypt'
+              - 'kms:Encrypt'
+              - 'kms:GenerateDataKey'
+            Resource: !Sub 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/${KMSKeyId}'
