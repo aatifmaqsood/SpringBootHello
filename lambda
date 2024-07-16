@@ -1,4 +1,38 @@
-- Sid: S3JobFlowPermissions
+EmrEc2ManagedPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PermissionsRequiredForDatapipelineEmrEc2
+            Effect: Allow
+            Action:
+              - cloudwatch:PutMetricData
+              - elasticmapreduce:ListBootstrapActions
+              - cloudwatch:GetMetricData
+              - cloudwatch:DeleteAlarms
+              - cloudwatch:ListMetrics
+              - elasticmapreduce:Describe*
+              - elasticmapreduce:ListInstanceGroups
+              - elasticmapreduce:ListInstances
+              - cloudwatch:DescribeAlarmHistory
+              - dynamodb:DescribeTable
+              - dynamodb:GetItem
+              - elasticmapreduce:ListClusters
+              - datapipeline:PollForTask
+              - dynamodb:BatchGetItem
+              - elasticmapreduce:ListSteps
+              - elasticmapreduce:AddJobFlowSteps
+              - dynamodb:Scan
+              - datapipeline:ReportTaskProgress
+              - dynamodb:Query
+              - cloudwatch:GetMetricStatistics
+              - cloudwatch:PutMetricAlarm
+              - datapipeline:SetTaskStatus
+              - cloudwatch:DescribeAlarms
+              - secretsmanager:GetSecretValue
+            Resource: '*'
+          - Sid: S3JobFlowPermissions
             Effect: Allow
             Action:
               - s3:ListBucket*
@@ -32,3 +66,23 @@
               - 'kms:Encrypt'
               - 'kms:GenerateDataKey'
             Resource: !Sub 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/${KMSKeyId}'
+
+  EmrEc2Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2008-10-17'
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      ManagedPolicyArns:
+        - !Ref EmrEc2ManagedPolicy
+        - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/LT_CloudWatch_Agent_Policy'
+        - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/IAM_Whitelist_Policy'
+        - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/IAM_Blacklist_Policy'
+      RoleName: !Sub '${AppIdLowerCase}-${ComponentName}-${EnvName}-ec2-role'
