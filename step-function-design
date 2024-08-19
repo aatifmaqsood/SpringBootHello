@@ -1,0 +1,60 @@
+High-Level Overview: Optimizing EMR Cluster Creation Time
+1. Introduction
+This document outlines steps to speed up the creation of EMR (Elastic MapReduce) clusters in AWS. The aim is to make the process quicker, which will help run data processing jobs more efficiently.
+
+1.1 What Is an EMR Cluster?
+An EMR cluster is a group of virtual machines that work together to process large amounts of data. Creating these clusters quickly is important so that data jobs start running as soon as possible.
+
+1.2 Why Is This Important?
+If creating a cluster takes too long, it delays the start of data processing tasks, leading to inefficiencies. By speeding up this process, we can make the system more responsive and cost-effective.
+
+2. Current Process
+Here’s how the EMR cluster creation process works right now:
+2.1 FetchCustomAMI: Retrieves a custom AMI ID from a Lambda function.
+2.2 Create an EMR Cluster: Creates an EMR cluster with the custom AMI ID, specifying various configuration options, such as instance types, security groups, and bootstrap actions.
+2.3 Stage Cluster Property: Extracts the cluster ID and log URI from the EMR cluster creation response.
+2.4 Custom Step: Runs a custom step on the EMR cluster, which executes a Hadoop jar file.
+2.5 Publish Result: Publishes the output of the custom step to an SNS topic.
+2.6 Terminate Cluster: Terminates the EMR cluster.
+2.7 Wait for log file Arrival: Waits for 300 seconds to allow the log files to arrive.
+2.8 Bootstrap Log to Splunk Cloud: Forwards the log files to Splunk Cloud using an EMR bootstrap log forwarder.
+2.9 Choose Log Approach: Determines whether to log to Splunk Cloud or CloudWatch based on the EMR release label.
+2.10 Log to Cloud Watch: Forwards the log files to CloudWatch using an EMR log forwarder.
+2.11 Log sync Complete?: Checks if the log sync is complete.
+2.12 SuccessState: Indicates that the workflow has completed successfully.
+
+3. Strategies to Speed Up EMR Cluster Creation
+3.1 Use Spot Instances
+What Are Spot Instances?
+Spot Instances are cheaper, unused cloud resources that can be bought at lower prices.
+How Will This Help?
+Using Spot Instances in our cluster setup can speed up the process, as they can be quickly allocated when available.
+What Do We Need to Do?
+Update the cluster setup to include Spot Instances, which will allow us to grab the cheapest and fastest available resources.
+3.2 Reuse Existing Clusters
+What Is Cluster Reuse?
+Instead of creating a new cluster every time, we can reuse a cluster that’s already running.
+How Will This Help?
+This approach saves the time it takes to set up a new cluster from scratch.
+What Do We Need to Do?
+Implement a system where clusters can be kept running and reused for multiple jobs, reducing setup time.
+3.3 Use EMR on EKS
+What Is EMR on EKS?
+EKS is Amazon’s managed Kubernetes service. Running EMR on EKS allows you to use Kubernetes to manage EMR jobs.
+How Will This Help?
+This can reduce the overhead of setting up new clusters by leveraging a pre-existing Kubernetes environment.
+What Do We Need to Do?
+Explore using EMR on EKS to run jobs, which might be faster for certain workloads.
+
+
+4. Implementation Plan
+Modify Infrastructure: Update the EMR creation script to include Spot Instances, parallel tasks, and auto-scaling.
+Optimize Application Settings: Fine-tune bootstrap actions and the custom AMI for quicker setup.
+Review and Test: Implement the changes in a testing environment to validate improvements.
+5. Risks and Considerations
+Spot Instance Availability: Spot Instances may not always be available. We’ll need a backup plan using On-Demand Instances if this happens.
+Cost Management: Using certain optimizations might incur additional costs. We’ll need to monitor and manage this closely.
+Maintenance: Keeping custom AMIs and reusable clusters up-to-date will require regular attention.
+6. Conclusion
+By implementing these strategies, we aim to reduce the EMR cluster creation time significantly, making our system faster and more efficient. A trial run or proof of concept should be conducted to see how these strategies perform before fully adopting them.
+
