@@ -24,8 +24,9 @@ Here’s how the EMR cluster creation process works right now:
 2.12 SuccessState: Indicates that the workflow has completed successfully.
 
 3. Strategies to Speed Up EMR Cluster Creation
-3.1 Use Spot Instances
-What Are Spot Instances?
+                                                   Method 1  Use Spot Instances
+
+*What Are Spot Instances?
 Spot Instances are cheaper, unused cloud resources that can be bought at lower prices.
 
 Using Spot Instances in our cluster setup can speed up the process, as they can be quickly allocated when available.
@@ -62,7 +63,7 @@ Here's a diagram to illustrate the spot instance architecture:
           +---------------+
           |  EMR Cluster  |
           +---------------+
-What Do We Need to Do?
+* What Do We Need to Do?
 Update the cluster setup to include Spot Instances, which will allow us to grab the cheapest and fastest available resources.
           {
             "Name": "EmrTaskFleet",
@@ -76,10 +77,14 @@ Update the cluster setup to include Spot Instances, which will allow us to grab 
             ]
           }
 In this updated version, we've added a new instance fleet called "EmrTaskFleet" that uses spot instances. We've also updated the "TargetSpotCapacity" parameter to specify the number of spot instances to launch.
-3.2 Reuse Existing Clusters
-What Is Cluster Reuse?
+
+
+                                                                      Method 2 Reuse Existing Clusters
+
+
+* What Is Cluster Reuse?
 Instead of creating a new cluster every time, we can reuse a cluster that’s already running.
-How Will This Help?
+I * How Will This Help?
 This approach saves the time it takes to set up a new cluster from scratch.
 Reusing existing clusters can help save time in creating an EMR cluster by leveraging clusters that are already running or have been recently terminated. Here's a diagram to illustrate how reusing existing clusters can help:
           +---------------+
@@ -119,7 +124,7 @@ Reusing existing clusters can help save time in creating an EMR cluster by lever
 
 In this diagram, we have an existing cluster repository that stores information about clusters that have been created or terminated recently. When a new EMR cluster is requested, the system checks the cluster repository to see if there's an existing cluster that can be reused.
 
-What Do We Need to Do?
+* What Do We Need to Do?
 Implement a system where clusters can be kept running and reused for multiple jobs, reducing setup time.
 
 If an existing cluster is found, it can be quickly reused, saving time and resources. This approach can reduce the time it takes to create a new cluster from scratch.
@@ -169,14 +174,17 @@ If an existing cluster is found, it can be quickly reused, saving time and resou
 In this updated version, we've added a new step called "Check Cluster Repository" that checks the cluster repository for existing clusters that can be reused. If an existing cluster is found, the system reuses the cluster and skips the cluster creation step. If no existing cluster is found, the system creates a new cluster from scratch.
 
 
-3.3 Use EMR on EKS
-What Is EMR on EKS?
+                                                                                Method 3 Use EMR on EKS
+
+
+*What Is EMR on EKS?
 EKS is Amazon’s managed Kubernetes service. Running EMR on EKS allows you to use Kubernetes to manage EMR jobs.
-How Will This Help?
+
+*How Will This Help?
 This can reduce the overhead of setting up new clusters by leveraging a pre-existing Kubernetes environment.
 Integrating AWS Step Functions with EMR on EKS involves modifying the current workflow to leverage Kubernetes (EKS) as the execution environment for EMR jobs. This integration allows better resource utilization, scaling, and cost efficiency.
-How Will This Help?
-What Do We Need to Do?
+
+*What Do We Need to Do?
 Explore using EMR on EKS to run jobs, which might be faster for certain workloads.
 
 High-Level Process Overview
@@ -272,6 +280,29 @@ Faster Job Start Times: Since the EKS cluster is pre-existing, starting jobs is 
 Cost Efficiency: Better resource management through Kubernetes, leveraging existing infrastructure and potentially using Spot Instances for cost savings.
 Scalability: EKS allows for dynamic scaling of resources based on job demands.
 Enhanced Flexibility: Kubernetes provides more flexibility in managing different workloads, integrating with other containerized applications and services.
+
+
+                                                            Method 4 Bootstrap Modification
+
+Current Bootstrap Functioning:
+1) Assign Env Variables like Splinkhost,Splunk token, Batch Nick name, AppID, Component Name, Environment, App Bucket, Release Label.
+2) IF EMR Version is less than 5.31 exit the bootstrap.
+3) Copying All rpm packages in app bucket to nodes or ec2 instances.
+4) Installing FluentBit
+5) Installing Postgresql
+6) Creating user and group for permissions.
+7) Passing Fluentbit Config 
+8) Updating FluentBit as per APPID and other Env variables Expalined in step 1.
+9) Starting FluentBit
+
+Steps we can move to Custom Ami in case of Reducing time and it includes All installation part.
+After that Steps will be-
+1) Assign Env Variables like Splinkhost,Splunk token, Batch Nick name, AppID, Component Name, Environment, App Bucket, Release Label.
+2) IF EMR Version is less than 5.31 exit the bootstrap.
+3) Updating FluentBit as per APPID and other Env variables Expalined in step 1.
+4) Starting FluentBit
+
+
 
 4. Implementation Plan
 Modify Infrastructure: Update the EMR creation script to include Spot Instances, parallel tasks, and auto-scaling.
