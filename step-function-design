@@ -29,15 +29,145 @@ What Are Spot Instances?
 Spot Instances are cheaper, unused cloud resources that can be bought at lower prices.
 How Will This Help?
 Using Spot Instances in our cluster setup can speed up the process, as they can be quickly allocated when available.
+Current Architecture
+
+In Our current architecture, We have a single EMR cluster with a fixed number of on-demand instances. When we submit a job, the cluster is created, and the job is executed on the available instances.
+
+Spot Instance Architecture
+
+By using spot instances, we can create a separate fleet of instances that can be used to execute your jobs. These spot instances can be launched in parallel with our on-demand instances, allowing us to process your jobs faster.
+
+Here's a diagram to illustrate the spot instance architecture:
+          +---------------+
+          |  On-Demand   |
+          |  Instances   |
+          +---------------+
+                  |
+                  |
+                  v
+          +---------------+
+          |  Spot Instances  |
+          |  (Fleet)        |
+          +---------------+
+                  |
+                  |
+                  v
+          +---------------+
+          |  Job Queue    |
+          +---------------+
+                  |
+                  |
+                  v
+          +---------------+
+          |  EMR Cluster  |
+          +---------------+
 What Do We Need to Do?
 Update the cluster setup to include Spot Instances, which will allow us to grab the cheapest and fastest available resources.
+          {
+            "Name": "EmrTaskFleet",
+            "InstanceFleetType": "TASK",
+            "TargetSpotCapacity": "${NumberofTaskSpotInstances}",
+            "InstanceTypeConfigs": [
+              {
+                "InstanceType": "${TaskInstanceType}",
+                "CustomAmiId.$": "$.CustomAMI.Payload.amId"
+              }
+            ]
+          }
+In this updated version, we've added a new instance fleet called "EmrTaskFleet" that uses spot instances. We've also updated the "TargetSpotCapacity" parameter to specify the number of spot instances to launch.
 3.2 Reuse Existing Clusters
 What Is Cluster Reuse?
 Instead of creating a new cluster every time, we can reuse a cluster that’s already running.
 How Will This Help?
 This approach saves the time it takes to set up a new cluster from scratch.
+Reusing existing clusters can help save time in creating an EMR cluster by leveraging clusters that are already running or have been recently terminated. Here's a diagram to illustrate how reusing existing clusters can help:
+          +---------------+
+          |  Existing   |
+          |  Clusters   |
+          +---------------+
+                  |
+                  |
+                  v
+          +---------------+
+          |  Cluster    |
+          |  Repository |
+          +---------------+
+                  |
+                  |
+                  v
+          +---------------+
+          |  EMR Cluster |
+          |  Creation    |
+          +---------------+
+                  |
+                  |
+                  v
+          +---------------+
+          |  Reuse      |
+          |  Existing   |
+          |  Cluster    |
+          +---------------+
+                  |
+                  |
+                  v
+          +---------------+
+          |  Quick      |
+          |  Cluster    |
+          |  Creation   |
+          +---------------+
+
+In this diagram, we have an existing cluster repository that stores information about clusters that have been created or terminated recently. When a new EMR cluster is requested, the system checks the cluster repository to see if there's an existing cluster that can be reused.
+
 What Do We Need to Do?
 Implement a system where clusters can be kept running and reused for multiple jobs, reducing setup time.
+
+If an existing cluster is found, it can be quickly reused, saving time and resources. This approach can reduce the time it takes to create a new cluster from scratch.
+
+{
+  "StartAt": "Check Cluster Repository",
+  "States": {
+    "Check Cluster Repository": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::elasticmapreduce:describeCluster",
+      "Parameters": {
+        "ClusterId.$": "$.clusterRepository.ClusterId"
+      },
+      "Next": "Reuse Existing Cluster"
+    },
+    "Reuse Existing Cluster": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.clusterRepository.ClusterStatus",
+          "StringEquals": "AVAILABLE",
+          "Next": "Configure Cluster"
+        }
+      ],
+      "Default": "Create New Cluster"
+    },
+    "Create New Cluster": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::elasticmapreduce:createCluster.sync",
+      "Parameters": {
+        ...
+      },
+      "Next": "Configure Cluster"
+    },
+    "Configure Cluster": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::elasticmapreduce:configureCluster",
+      "Parameters": {
+        ...
+      },
+      "Next": "Submit Job"
+    },
+    ...
+  }
+}
+
+In this updated version, we've added a new step called "Check Cluster Repository" that checks the cluster repository for existing clusters that can be reused. If an existing cluster is found, the system reuses the cluster and skips the cluster creation step. If no existing cluster is found, the system creates a new cluster from scratch.
+
+
 3.3 Use EMR on EKS
 What Is EMR on EKS?
 EKS is Amazon’s managed Kubernetes service. Running EMR on EKS allows you to use Kubernetes to manage EMR jobs.
