@@ -47,7 +47,7 @@ Here's a diagram to illustrate the spot instance architecture:
                   |
                   v
           +---------------+
-          |  Spot Instances  |
+          |  Spot Instances |
           |  (Fleet)        |
           +---------------+
                   |
