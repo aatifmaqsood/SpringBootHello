@@ -1,88 +1,24 @@
-EmrEc2ManagedPolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
-    Properties:
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Sid: PermissionsRequiredForDatapipelineEmrEc2
-            Effect: Allow
-            Action:
-              - cloudwatch:PutMetricData
-              - elasticmapreduce:ListBootstrapActions
-              - cloudwatch:GetMetricData
-              - cloudwatch:DeleteAlarms
-              - cloudwatch:ListMetrics
-              - elasticmapreduce:Describe*
-              - elasticmapreduce:ListInstanceGroups
-              - elasticmapreduce:ListInstances
-              - cloudwatch:DescribeAlarmHistory
-              - dynamodb:DescribeTable
-              - dynamodb:GetItem
-              - elasticmapreduce:ListClusters
-              - datapipeline:PollForTask
-              - dynamodb:BatchGetItem
-              - elasticmapreduce:ListSteps
-              - elasticmapreduce:AddJobFlowSteps
-              - dynamodb:Scan
-              - datapipeline:ReportTaskProgress
-              - dynamodb:Query
-              - cloudwatch:GetMetricStatistics
-              - cloudwatch:PutMetricAlarm
-              - datapipeline:SetTaskStatus
-              - cloudwatch:DescribeAlarms
-              - secretsmanager:GetSecretValue
-            Resource: '*'
-          - Sid: S3JobFlowPermissions
-            Effect: Allow
-            Action:
-              - s3:ListBucket*
-              - s3:GetObject*
-              - s3:GetBucket*
-              - s3:GetAccelerateConfiguration
-              - s3:GetLifecycleConfiguration
-              - s3:ListMultipartUploadParts
-              - s3:PutObject
-              - s3:PutObjectTagging
-              - s3:PutObjectVersionTagging
-              - s3:PutAccelerateConfiguration
-              - s3:PutLifecycleConfiguration
-              - s3:Replicate*
-              - s3:RestoreObject
-              - s3:DeleteObject*
-            Resource: '*'
-          - Sid: S3CustomBucketPermissions
-            Effect: Allow
-            Action:
-              - 's3:ListBucket'
-              - 's3:GetObject'
-              - 's3:PutObject'
-            Resource:
-              - !Sub 'arn:aws:s3:::${S3BucketName}'
-              - !Sub 'arn:aws:s3:::${S3BucketName}/*'
-          - Sid: KMSPermissions
-            Effect: Allow
-            Action:
-              - 'kms:Decrypt'
-              - 'kms:Encrypt'
-              - 'kms:GenerateDataKey'
-            Resource: !Sub 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/${KMSKeyId}'
+import boto3
 
-  EmrEc2Role:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2008-10-17'
-        Statement:
-          - Sid: ''
-            Effect: Allow
-            Principal:
-              Service:
-                - ec2.amazonaws.com
-            Action: 'sts:AssumeRole'
-      Path: /
-      ManagedPolicyArns:
-        - !Ref EmrEc2ManagedPolicy
-        - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/LT_CloudWatch_Agent_Policy'
-        - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/IAM_Whitelist_Policy'
-        - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/IAM_Blacklist_Policy'
-      RoleName: !Sub '${AppIdLowerCase}-${ComponentName}-${EnvName}-ec2-role'
+emr = boto3.client('emr')
+
+def lambda_handler(event, context):
+    cluster_name = event['ClusterName']
+    try:
+        response = emr.describe_cluster(ClusterId=cluster_name)
+        cluster_status = response['Cluster']['Status']
+        return {
+            'statusCode': 200,
+            'body': cluster_status
+        }
+    except emr.exceptions.ClientError as e:
+        if e.response['Error']['Code'] == 'ClusterNotFound':
+            return {
+                'statusCode': 404,
+                'body': 'Cluster not found'
+            }
+        else:
+            return {
+                'statusCode': 500,
+                'body': 'Error describing cluster'
+            }
