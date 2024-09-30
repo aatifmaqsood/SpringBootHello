@@ -1,0 +1,28 @@
+   "States": {
+         "FetchCustomAMI": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+            "FunctionName": "$(AppIdLowerCase)-${ComponentName}-$(EnvName)-custom-Ami-Function",
+            "Payload": {
+                "parameterStorePath": "$(parameterStorePath}"
+            }
+            },
+                "ResultPath": "$.CustomAMI",
+                "Next": "Describe EMR Cluster"
+        },
+        "Describe EMR Cluster": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": "$(AppIdLowerCase)-${ComponentName}-$(EnvName)-describe-emr-cluster-Function",
+                "Payload": {
+                    "ClusterName": "${Cluster_Name}"
+                }
+            },
+            "ResultPath": "$.clusterStatus",
+            "Next": "Check Cluster Status"
+        },
+        "Check Cluster Status": {
+            "Type": "Choice",
+            "Choices": [
