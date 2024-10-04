@@ -32,6 +32,24 @@
                 }
               ]
             }
+          },
+          {
+            "PolicyName": "DenyAllOtherActionsPolicy",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Deny",
+                  "Action": "*",
+                  "Resource": "*",
+                  "Condition": {
+                    "StringNotEquals": {
+                      "aws:SourceArn": "${AWS::AccountId}:*"
+                    }
+                  }
+                }
+              ]
+            }
           }
         ]
       }
