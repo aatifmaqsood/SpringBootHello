@@ -1,17 +1,22 @@
 import json
 import boto3
+from botocore.exceptions import ClientError
 
 def lambda_handler(event, context):
-    # Initialize the boto3 EMR client
-    emr_client = boto3.client('emr')
+    # Initialize the boto3 EMR client with the appropriate region
+    emr_client = boto3.client('emr', region_name='us-east-1')  # Replace with your region
     
     # Get the cluster ID from the event or hardcode it here
-    cluster_id = event.get('cluster_id', 'j-test12532')  # Replace with your cluster ID if not passed via event
+    cluster_id = event.get('cluster_id', '<yakunid>')  # Replace with your cluster ID if not passed via event
     
     try:
+        print(f"Checking status for cluster: {cluster_id}")
+        
         # Get cluster status
         response = emr_client.describe_cluster(ClusterId=cluster_id)
         cluster_status = response['Cluster']['Status']['State']
+        
+        print(f"Cluster status: {cluster_status}")
         
         # Return the cluster status
         return {
@@ -22,11 +27,48 @@ def lambda_handler(event, context):
             })
         }
     
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        
+        if error_code in ['AccessDeniedException', 'UnauthorizedOperation']:
+            # Handle permission errors
+            print(f"Permission Error: {error_code} - {error_message}")
+            return {
+                'statusCode': 403,
+                'body': json.dumps({
+                    'error': 'Permission denied. Please check your IAM policies.',
+                    'details': error_message
+                })
+            }
+        elif error_code == 'InvalidClusterIdException':
+            # Handle invalid cluster ID
+            print(f"Invalid Cluster ID: {error_message}")
+            return {
+                'statusCode': 400,
+                'body': json.dumps({
+                    'error': 'Invalid Cluster ID provided.',
+                    'details': error_message
+                })
+            }
+        else:
+            # Handle other client errors
+            print(f"ClientError: {error_code} - {error_message}")
+            return {
+                'statusCode': 500,
+                'body': json.dumps({
+                    'error': 'An error occurred while describing the cluster.',
+                    'details': error_message
+                })
+            }
+    
     except Exception as e:
-        # Handle any errors
+        # Handle any other unexpected errors
+        print(f"Unexpected Error: {str(e)}")
         return {
             'statusCode': 500,
             'body': json.dumps({
-                'error': str(e)
+                'error': 'An unexpected error occurred.',
+                'details': str(e)
             })
         }
