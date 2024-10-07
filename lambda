@@ -1,24 +1,32 @@
+import json
 import boto3
 
-emr = boto3.client('emr')
-
 def lambda_handler(event, context):
-    cluster_name = event['ClusterName']
+    # Initialize the boto3 EMR client
+    emr_client = boto3.client('emr')
+    
+    # Get the cluster ID from the event or hardcode it here
+    cluster_id = event.get('cluster_id', 'j-test12532')  # Replace with your cluster ID if not passed via event
+    
     try:
-        response = emr.describe_cluster(ClusterId=cluster_name)
-        cluster_status = response['Cluster']['Status']
+        # Get cluster status
+        response = emr_client.describe_cluster(ClusterId=cluster_id)
+        cluster_status = response['Cluster']['Status']['State']
+        
+        # Return the cluster status
         return {
             'statusCode': 200,
-            'body': cluster_status
+            'body': json.dumps({
+                'ClusterId': cluster_id,
+                'Status': cluster_status
+            })
         }
-    except emr.exceptions.ClientError as e:
-        if e.response['Error']['Code'] == 'ClusterNotFound':
-            return {
-                'statusCode': 404,
-                'body': 'Cluster not found'
-            }
-        else:
-            return {
-                'statusCode': 500,
-                'body': 'Error describing cluster'
-            }
+    
+    except Exception as e:
+        # Handle any errors
+        return {
+            'statusCode': 500,
+            'body': json.dumps({
+                'error': str(e)
+            })
+        }
