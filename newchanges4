@@ -24,5 +24,19 @@
             "Next": "Check Cluster Status"
         },
         "Check Cluster Status": {
-            "Type": "Choice",
-            "Choices": [
+         "Type": "Choice",
+         "Choices": [
+           {
+             "Variable": "$.clusterStatus.cluster_status",
+             "StringEquals": "WAITING",
+             "Next": "Stage Cluster Property"
+           },
+           {
+             "Not": {
+               "Variable": "$.clusterStatus.cluster_status",
+               "StringEquals": "WAITING"
+             },
+             "Next": "Create an EMR Cluster"
+           }
+         ]
+       },
