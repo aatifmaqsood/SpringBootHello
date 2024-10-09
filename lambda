@@ -5,11 +5,27 @@ from botocore.exceptions import ClientError
 def lambda_handler(event, context):
     # Initialize the boto3 EMR client with the appropriate region
     emr_client = boto3.client('emr', region_name='us-east-1')  # Replace with your region
-    
+    clusters = emr_client.list_clusters(ClusterStates=['STARTING', 'BOOTSTRAPPING', 'RUNNING', 'WAITING', 'TERMINATING', 'TERMINATED'])
+        
+        # Find cluster with the given name
+        
+
+        print(f"Cluster ID for {cluster_name}: {cluster_id}")
     # Get the cluster ID from the event or hardcode it here
     cluster_id = event.get('cluster_id', '<yakunid>')  # Replace with your cluster ID if not passed via event
     
     try:
+        cluster_id = None
+        for cluster in clusters['Clusters']:
+            if cluster['Name'] == cluster_name:
+                cluster_id = cluster['Id']
+                break
+        
+        if not cluster_id:
+            return {
+                'statusCode': 404,
+                'body': f"Cluster with name {cluster_name} not found"
+            }
         print(f"Checking status for cluster: {cluster_id}")
         
         # Get cluster status
