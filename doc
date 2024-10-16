@@ -1,0 +1,27 @@
+Main Workflow
+
+Fetch Custom AMI: The workflow starts by invoking a Lambda function to fetch a custom Amazon Machine Image (AMI) ID.
+Describe EMR Cluster: The workflow then invokes a Lambda function to describe the EMR cluster. If the cluster exists, the workflow checks its status.
+Check Cluster Status: The workflow checks the status of the EMR cluster. If the cluster is in a "WAITING" state, the workflow proceeds to the next step. Otherwise, it creates a new EMR cluster.
+Create EMR Cluster: The workflow creates a new EMR cluster using the custom AMI ID and other configuration parameters.
+Stage Cluster Property: The workflow stages the cluster property, which includes the cluster ID and log URI.
+Custom Step: The workflow runs a custom step on the EMR cluster.
+Publish Result: The workflow publishes the result of the custom step to an SNS topic.
+Error Handling
+
+Publish Error: If any error occurs during the workflow, the workflow publishes the error to an SNS topic.
+Terminate Cluster - Fail: If the workflow fails, it terminates the EMR cluster.
+Idle Termination Flow
+
+Describe EMR Cluster - Terminate: The workflow invokes a Lambda function to describe the EMR cluster and check its status.
+Check Cluster Status - Terminate: The workflow checks the status of the EMR cluster. If the cluster is in a "WAITING" state, the workflow terminates the cluster.
+Terminate Cluster: The workflow terminates the EMR cluster.
+Log Forwarding
+
+Bootstrap Log to Splunk Cloud: The workflow forwards the EMR cluster logs to Splunk Cloud.
+Log to Cloud Watch: The workflow forwards the EMR cluster logs to CloudWatch.
+Success and Failure States
+
+SuccessState: The workflow ends in a success state if all steps are completed successfully.
+FailState: The workflow ends in a failure state if any error occurs during the workflow.
+Overall, the Step Function is designed to create and manage an EMR cluster, run custom tasks on the cluster, and then terminate the cluster. The workflow also includes error handling and log forwarding mechanisms.
