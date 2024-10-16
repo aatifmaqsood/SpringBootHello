@@ -1,0 +1,1 @@
+The objective of this Step Function is to automate the process of creating and managing an Amazon EMR (Elastic MapReduce) cluster, running custom tasks on the cluster, and then terminating the cluster. The workflow is designed to handle errors and exceptions, and to forward logs to Splunk Cloud or CloudWatch for monitoring and analysis.
