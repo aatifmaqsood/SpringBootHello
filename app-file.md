@@ -8,7 +8,19 @@ Storage Strategy
 File Structure
 To manage application properties efficiently, we propose few ways.
 1)  Hierarchical file structure within the Git repository. The following structure is recommended:
-/     └── vtest-hello-world         ├── values.yaml         ├── environments/         │   ├── dev/         │   │   ├── us-east1.yaml         │   │   └── us-east2.yaml         │   ├── qa/         │   │   ├── us-east1.yaml         │   │   └── us-east2.yaml         │   └── prod/         │       ├── us-east1.yaml         │       └── us-east2.yaml         
+
+   /     └── vtest-hello-world         
+          ├── values.yaml         
+          ├── environments/         
+          │   ├── dev/         
+          │   │   ├── us-east1.yaml         
+          │   │   └── us-east2.yaml         
+          │   ├── qa/         
+          │   │   ├── us-east1.yaml         
+          │   │   └── us-east2.yaml         
+          │   └── prod/         
+          │       ├── us-east1.yaml         
+          │       └── us-east2.yaml         
 
 .
 Hierarchy of Properties
