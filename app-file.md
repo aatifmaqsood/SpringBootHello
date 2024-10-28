@@ -29,12 +29,25 @@ Application Level
 The application level is the most generic level. Properties common to all environments and regions should be stored in the application.yaml file.
 Example contents of application.yaml:
 ```yaml
-App_ID: 5123412323 database:   connectionTimeout: 5000 logging:   level: INFO api:   baseUrl: https://api.myapp.com
+App_ID: 5123412323 
+database:   
+   connectionTimeout: 5000 
+logging:   
+   level: INFO 
+api:   
+   baseUrl: https://api.myapp.com
 Product_Line: PL38253 ```
 Environment Level
 Environment-specific properties should be stored in separate directories under the environments folder. Each environment (e.g., dev, qa, prod) will have its own folder containing region-specific property files.
 Example of environments/dev/us-east1.yaml:
-```yaml database:   url: jdbc:mysql://dev-us-east1-db.myapp.com:3306/mydb   username: dev_user logging:   level: DEBUG api:   baseUrl: https://api.dev.myapp.com
+```yaml 
+database:   
+   url: jdbc:mysql://dev-us-east1-db.myapp.com:3306/mydb   
+   username: dev_user 
+logging:   
+   level: DEBUG 
+api:   
+   baseUrl: https://api.dev.myapp.com
 IamUserName: srvAP323235334
 AwsUser: AKai
 S3bucketName: vtest-hello-world-us-east1-bucket
@@ -42,8 +55,19 @@ AccountNumber: 3230942232 ```
 Region Level
 Properties that are specific to a region (e.g., region-specific database endpoints) should be stored in files like us-east1.yaml or us-east2.yaml under the appropriate environment directory. These files allow finer granularity to manage properties that are unique to a region.
 2) Managing application properties using Jinja2 templates can streamline the process of handling environment-specific , region-specific settings. Here's how we can integrate Jinja2 for managing properties in the GitOps model.
-/     └── vtest-hello-world         ├── values.yaml.j2         ├── environments/         │   ├── dev/         │   │   ├── us-east1.yaml         │   │   └── us-east2.yaml         │   ├── qa/         │   │   ├── us-east1.yaml         │   │   └── us-east2.yaml         │   └── prod/         │       ├── us-east1.yaml         │       └── us-east2.yaml
-       ├── app.yaml
+/     └── vtest-hello-world         
+         ├── values.yaml.j2         
+         ├── environments/         
+         │   ├── dev/         
+         │   │   ├── us-east1.yaml         
+         │   │   └── us-east2.yaml         
+         │   ├── qa/         
+         │   │   ├── us-east1.yaml         
+         │   │   └── us-east2.yaml         
+         │   └── prod/         
+         │   |   ├── us-east1.yaml         
+         │   |   └── us-east2.yaml
+         ├── app.yaml
 
 Jinja2 Template Format:
 # values.yaml.j2
