@@ -1,0 +1,44 @@
+To Permanently Delete Expired Versions:
+1) If you want to ensure that expired versions are permanently deleted, you need to include the NoncurrentVersionExpiration rule in the lifecycle policy.
+
+Here’s how to update our lifecycle policy to handle both:
+
+Add delete markers for current versions after 30 days.
+Permanently delete non-current versions after 60 days.
+```
+LifecycleConfiguration:
+        Rules:
+          - Id: "ExpirationRule"
+            Status: "Enabled"
+            ExpirationInDays: 30 # Add a delete marker for current versions after 30 days
+          - Id: "NonCurrentVersionExpirationRule"
+            Status: "Enabled"
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 60 # Permanently delete non-current versions after 60 days
+      VersioningConfiguration:
+        Status: "Enabled"
+```
+2) we can transition non-current versions to a cheaper storage class (e.g., Glacier) instead of deleting them.
+Storage Cost: Significantly lower than S3 Standard (up to 68% cheaper)https://aws.amazon.com/s3/pricing/.
+```
+LifecycleConfiguration: 
+    Rules: 
+    # Transition non-current versions to Glacier after 60 days 
+    - Id: "NonCurrentVersionTransitionToGlacier" 
+      Status: "Enabled" 
+      NoncurrentVersionTransitions: 
+      - StorageClass: "GLACIER" # Use GLACIER or GLACIER_DEEP_ARCHIVE 
+        TransitionInDays: 60 
+    # Permanently delete non-current versions after 90 days 
+    - Id: "NonCurrentVersionExpirationRule" 
+      Status: "Enabled" 
+      NoncurrentVersionExpiration: 
+        NoncurrentDays: 90 
+    # Add delete markers for current versions after 30 days 
+    - Id: "ExpirationRule" 
+      Status: "Enabled" 
+      ExpirationInDays: 30 # Modify retention period to 30 days 
+    VersioningConfiguration: 
+      Status: "Enabled"
+
+```
