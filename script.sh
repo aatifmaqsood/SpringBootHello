@@ -24,7 +24,7 @@ else
     echo "Updating existing lifecycle policy..."
     jq '.Rules |= map(
     .Expiration |= {"Days": 30} |  # Ensure Expiration has 30 days
-    . + (if has("NoncurrentVersionExpiration") then {} else {"NoncurrentVersionExpiration": {"NoncurrentDays": 30}} end)  # Add NoncurrentVersionExpiration separately
+    . + (if has("NoncurrentVersionExpiration") then {} else {"NoncurrentVersionExpiration": {"NoncurrentDays": 0}} end)  # Add NoncurrentVersionExpiration separately
     )' "$POLICY_FILE" > "$UPDATED_POLICY_FILE"
 fi
 # Apply the updated policy
@@ -33,3 +33,27 @@ aws s3api put-bucket-lifecycle-configuration --bucket "$BUCKET_NAME" --lifecycle
 echo "✅ Lifecycle policy updated successfully!"
 # Cleanup
 rm -f "$POLICY_FILE" "$UPDATED_POLICY_FILE"
+
+# List all object versions
+aws s3api list-object-versions --bucket "$BUCKET_NAME" --query 'Versions[*].[Key, VersionId, LastModified]' --output json > versions.json
+
+# Parse JSON and delete versions older than 30 days
+cat versions.json | jq -c '.[]' | while read -r version; do
+    OBJECT_KEY=$(echo $version | jq -r '.[0]')
+    VERSION_ID=$(echo $version | jq -r '.[1]')
+    LAST_MODIFIED=$(echo $version | jq -r '.[2]')
+    
+    # Convert last modified date to epoch
+    LAST_MODIFIED_EPOCH=$(date -d "$LAST_MODIFIED" +%s)
+    
+    # Calculate age in days
+    AGE_DAYS=$(( (CURRENT_DATE - LAST_MODIFIED_EPOCH) / 86400 ))
+
+    # Delete if older than 30 days
+    if [ "$AGE_DAYS" -gt 30 ]; then
+        echo "Deleting old version: $OBJECT_KEY (Version: $VERSION_ID, Age: $AGE_DAYS days)"
+        aws s3api delete-object --bucket "$BUCKET_NAME" --key "$OBJECT_KEY" --version-id "$VERSION_ID"
+    fi
+done
+rm -f versions.json
+echo "Old versions deleted manually."
