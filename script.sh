@@ -44,7 +44,8 @@ cat versions.json | jq -c '.[]' | while read -r version; do
     LAST_MODIFIED=$(echo $version | jq -r '.[2]')
     
     # Convert last modified date to epoch
-    LAST_MODIFIED_EPOCH=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$LAST_MODIFIED" +%s)
+    LAST_MODIFIED_CLEANED=$(echo "$LAST_MODIFIED" | sed 's/+00:00//')
+    LAST_MODIFIED_EPOCH=$(date -j -u -f "%Y-%m-%dT%H:%M:%S" "$LAST_MODIFIED_CLEANED" +%s)
     
     # Calculate age in days
     AGE_DAYS=$(( (CURRENT_DATE - LAST_MODIFIED_EPOCH) / 86400 ))
