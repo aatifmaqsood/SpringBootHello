@@ -36,7 +36,7 @@ rm -f "$POLICY_FILE" "$UPDATED_POLICY_FILE"
 
 # List all object versions
 aws s3api list-object-versions --bucket "$BUCKET_NAME" --query 'Versions[*].[Key, VersionId, LastModified]' --output json > versions.json
-
+CURRENT_DATE=$(date +%s)
 # Parse JSON and delete versions older than 30 days
 cat versions.json | jq -c '.[]' | while read -r version; do
     OBJECT_KEY=$(echo $version | jq -r '.[0]')
