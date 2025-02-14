@@ -38,9 +38,11 @@ jq --arg cutoff "$THIRTY_DAYS_AGO" '
 ' "$OUTPUT_FILE" > "$ANALYSIS_FILE"
 
 # Calculate total size and savings
-TOTAL_SIZE=$(jq '[.Size | tonumber] | add' "$ANALYSIS_FILE")
-TOTAL_SIZE_GB=$(echo "scale=2; $TOTAL_SIZE / (1024 * 1024 * 1024)" | bc)
-POTENTIAL_SAVINGS=$(echo "scale=2; $TOTAL_SIZE_GB * 0.023" | bc)
+#TOTAL_SIZE=$(jq '[.Size | tonumber] | add' "$ANALYSIS_FILE")
+TOTAL_SIZE=$(cat "$ANALYSIS_FILE" | grep '"Size":' | awk -F': ' '{sum += $2} END {print sum}')
+
+TOTAL_SIZE_GB=$(echo "scale=4; $TOTAL_SIZE / (1024 * 1024 * 1024)" | bc)
+POTENTIAL_SAVINGS=$(echo "scale=4; $TOTAL_SIZE_GB * 0.023" | bc)
 
 echo "---------------------------------------------"
 echo "Analysis saved to: $ANALYSIS_FILE"
