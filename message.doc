@@ -31,3 +31,9 @@ Allows:
 Short timeout by default (faster recovery on crash)
 
 Long jobs to complete without duplication
+
+Use the AWS CLI or SDK:
+
+aws sqs get-queue-attributes \
+  --queue-url <your-queue-url> \
+  --attribute-names VisibilityTimeout
