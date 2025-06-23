@@ -1,0 +1,101 @@
+import boto3
+import signal
+import sys
+import time
+import threading
+import logging
+import os
+
+# Setup logging to stdout for Fluent Bit
+logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+                    format='%(asctime)s | %(levelname)s | %(message)s')
+
+# Config
+QUEUE_URL = os.getenv("SQS_QUEUE_URL")
+VISIBILITY_TIMEOUT = int(os.getenv("INITIAL_VISIBILITY_TIMEOUT", 30))  # seconds
+EXTEND_INTERVAL = int(os.getenv("VISIBILITY_EXTENSION_INTERVAL", 10))  # seconds
+EXTEND_BY = int(os.getenv("EXTEND_BY", 30))  # seconds
+
+# Global for shutdown coordination
+shutdown_event = threading.Event()
+receipt_handle = None
+
+sqs = boto3.client('sqs')
+
+
+def extend_visibility_timeout():
+    while not shutdown_event.is_set():
+        time.sleep(EXTEND_INTERVAL)
+        if receipt_handle:
+            try:
+                logging.info(f"Extending visibility timeout by {EXTEND_BY}s")
+                sqs.change_message_visibility(
+                    QueueUrl=QUEUE_URL,
+                    ReceiptHandle=receipt_handle,
+                    VisibilityTimeout=EXTEND_BY
+                )
+            except Exception as e:
+                logging.error(f"Failed to extend visibility timeout: {e}")
+
+
+def handle_sigterm(signum, frame):
+    logging.warning("Received SIGTERM. Shutting down gracefully.")
+    shutdown_event.set()
+
+
+def process_message(message_body):
+    logging.info(f"Started processing message: {message_body}")
+    time.sleep(10)  # Simulated job logic
+    logging.info("Finished processing message")
+
+
+def main():
+    global receipt_handle
+
+    # Register SIGTERM handler
+    signal.signal(signal.SIGTERM, handle_sigterm)
+
+    logging.info("Polling message from SQS...")
+    response = sqs.receive_message(
+        QueueUrl=QUEUE_URL,
+        MaxNumberOfMessages=1,
+        WaitTimeSeconds=10,
+        VisibilityTimeout=VISIBILITY_TIMEOUT
+    )
+
+    messages = response.get('Messages', [])
+    if not messages:
+        logging.info("No messages received.")
+        return
+
+    message = messages[0]
+    receipt_handle = message['ReceiptHandle']
+    message_body = message['Body']
+
+    # Start visibility timeout extender
+    extender_thread = threading.Thread(target=extend_visibility_timeout)
+    extender_thread.start()
+
+    try:
+        process_message(message_body)
+
+        if shutdown_event.is_set():
+            logging.warning("Job interrupted. Message will return to queue.")
+        else:
+            logging.info("Deleting message from queue")
+            sqs.delete_message(
+                QueueUrl=QUEUE_URL,
+                ReceiptHandle=receipt_handle
+            )
+
+    except Exception as e:
+        logging.error(f"Job failed with exception: {e}")
+
+    finally:
+        shutdown_event.set()
+        extender_thread.join()
+        logging.info("Job completed.")
+
+
+if __name__ == "__main__":
+    main()
