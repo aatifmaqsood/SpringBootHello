@@ -1,0 +1,33 @@
+Message Visibility Timeout: 
+message visibility timeout is the period a message becomes invisible to other consumers after being read, until:
+
+a) It’s deleted (job succeeded), or
+
+b) Timeout expires (job failed or took too long).
+
+For KSJ patterns (Kubernetes-based consumers reading messages and doing async jobs), this visibility timeout must align with the job duration. Misalignment causes:
+
+a) Duplicate processing
+
+b) Wasted resources
+
+c) Harder failure tracing
+
+  Should It Be Dynamically Increased?
+Option A: Fixed Visibility Timeout
+Set to the maximum expected processing time.
+
+✅ Simple to manage
+
+❌ Risk of long delays before reprocessing on failure
+
+Option B: Dynamically Extend (Best Practice)
+When a job starts, set initial visibility timeout (e.g., 30s).
+
+While processing, periodically extend it using ChangeMessageVisibility.
+
+Allows:
+
+Short timeout by default (faster recovery on crash)
+
+Long jobs to complete without duplication
