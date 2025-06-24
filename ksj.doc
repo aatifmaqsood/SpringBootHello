@@ -261,4 +261,33 @@ Required fields:
 
 message_id, job_id, retry_count, duration, status, error
 
+5) Keda Configurations:
+| Setting                       | Recommended Default             | Description                            |
+| ----------------------------- | ------------------------------- | -------------------------------------- |
+| `pollingInterval`             | `10s`                           | Frequency of checking SQS for messages |
+| `cooldownPeriod`              | `30s`                           | Time to wait before scaling down jobs  |
+| `minReplicaCount`             | `0`                             | No idle jobs running                   |
+| `maxReplicaCount`             | Set to match queue scale limits |                                        |
+| `scaledJob.concurrencyPolicy` | `Forbid`                        | Prevent parallel jobs on same message  |
+| `jobTargetRef.backoffLimit`   | `3`                             | Number of retries on job failure       |
 
+```
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: my-sqs-worker
+spec:
+  pollingInterval: 10
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  maxReplicaCount: 10
+  jobTargetRef:
+    backoffLimit: 3
+    parallelism: 1
+  triggers:
+    - type: aws-sqs-queue
+      metadata:
+        queueURL: https://sqs.us-east-1.amazonaws.com/1234/my-queue
+        awsRegion: us-east-1
+
+```
