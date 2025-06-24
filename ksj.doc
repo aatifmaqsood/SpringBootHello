@@ -137,3 +137,87 @@ except Exception as e:
     # Message is NOT deleted — becomes visible again after timeout
 ```
 If the job crashes or is interrupted (SIGTERM), the message is left in SQS and reappears after timeout.
+
+
+
+2) Read Message → Process Message →  Delete Message
+following code snippet is just a sample app reference
+
+ a. Read 1 Message from SQS
+```
+response = sqs.receive_message(
+    QueueUrl=QUEUE_URL,
+    MaxNumberOfMessages=1,  # 👈 Reads only one message per job
+    WaitTimeSeconds=10,
+    VisibilityTimeout=VISIBILITY_TIMEOUT
+)
+```
+
+This is the message retrieval step.
+
+MaxNumberOfMessages=1: Ensures one job handles one message.
+
+VisibilityTimeout: Ensures the message becomes invisible to others while the job is processing it.
+
+Note: This makes the job scalable, isolated, and avoids concurrent processing of the same message.
+
+b. Process the Message
+following code snippet is just a sample app reference
+```
+def process_message(message_body, receipt_handle):
+    logging.info(f"Started processing message: {message_body}")
+
+    total_processing_time = 60  # Total simulated job time in seconds
+    elapsed = 0
+
+    while elapsed < total_processing_time and not shutdown_event.is_set():
+        time.sleep(EXTEND_INTERVAL)  # ⏱️ Sleep for configured interval
+        elapsed += EXTEND_INTERVAL
+
+        logging.info(f"Processed {elapsed}/{total_processing_time} seconds")
+
+        try:
+            logging.info(f"Extending visibility timeout by {EXTEND_BY}s")
+            sqs.change_message_visibility(
+                QueueUrl=QUEUE_URL,
+                ReceiptHandle=receipt_handle,
+                VisibilityTimeout=EXTEND_BY
+            )
+        except Exception as e:
+            logging.error(f"Failed to extend visibility timeout: {e}")
+
+    if shutdown_event.is_set():
+        logging.warning("Processing was interrupted by shutdown.")
+    else:
+        logging.info("Finished processing message")
+
+```
+
+here we will be having our code logic.
+
+| Config Var        | Usage in Function                                        |
+| ----------------- | -------------------------------------------------------- |
+| `EXTEND_INTERVAL` | Used as sleep duration in the loop — how often to extend |
+| `EXTEND_BY`       | Duration to extend visibility on each API call           |
+
+c. Delete the Message (Only on Success)
+```
+if shutdown_event.is_set():
+    logging.warning("Job interrupted. Message will return to queue.")
+else:
+    logging.info("Deleting message from queue")
+    sqs.delete_message(
+        QueueUrl=QUEUE_URL,
+        ReceiptHandle=receipt_handle
+    )
+```
+
+
+If processing completed successfully and job was not interrupted, the message is explicitly deleted from the queue.
+
+This prevents it from being reprocessed.
+
+Note: Only delete after successful processing.
+
+
+
