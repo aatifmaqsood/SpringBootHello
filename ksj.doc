@@ -1,0 +1,2 @@
+Objective:
+This document defines the reference architecture and behavioral standards for Kubernetes Scaling Jobs (KSJ) used for asynchronous message processing in our platform. It outlines how we prefer a KSJ to function, handles edge cases, and defines default configurations for KEDA, SQS, and job lifecycle.
