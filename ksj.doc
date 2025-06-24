@@ -73,3 +73,13 @@ queue)
 +-----------------------------+
 |   Delete Message from SQS   |
 +-----------------------------+
+
+Implementation Guidelines
+1. Message Visibility Timeout:
+| Feature               | Recommendation                                                        |
+| --------------------- | --------------------------------------------------------------------- |
+| **Initial Timeout**   | 30–60 seconds (via `ReceiveMessage`)                                  |
+| **Dynamic Extension** | Yes – Extend during long processing using `ChangeMessageVisibility` |
+| **Maximum Timeout**   | Should match max expected processing time (e.g., 10 minutes)          |
+| **On Failure**        | Don’t delete message – let it become visible again after timeout      |
+
