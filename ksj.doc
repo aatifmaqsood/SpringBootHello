@@ -9,3 +9,29 @@ Summary
 4) Ensure messages are reliably handled, retried if needed, and never lost silently
 5) Provide observability through structured logs
 6) Be resilient to failures and handle graceful shutdowns
+
+Reference Workflow:
+***
++-------------+ +------------+ +----------------+
+| Developer/API | -----> | S3 | -----> | SQS |
++-------------+ +------------+ +----------------+
+|
+v
++---------------------------+
+| KEDA ScaledObject |
+| (SQS Trigger) |
++---------------------------+
+|
+v
++--------------------------+
+| K8s ScaledJob (KSJ)|
++--------------------------+
+|
++------------------------+-------------------+-------------------------+
+| | |
+Read SQS Msg Execute Business Logic Log + Retry Policy
+| | |
+On Success On Success On Failure
+| | |
+Delete SQS Msg Terminate Pod Let message timeout (remain in
+queue)
