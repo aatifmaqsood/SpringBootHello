@@ -247,3 +247,18 @@ Our Logic should integrates graceful SIGTERM handling correctly:
 
 > Skips deleting the message on early termination
 
+4)Logging 
+All logs must be written to stdout
+
+Use structured log format:
+
+```
+2025-06-23T10:00:00Z | INFO | Processing message: {messageId: abc123}
+2025-06-23T10:00:15Z | WARN | SIGTERM received, exiting
+2025-06-23T10:00:20Z | ERROR | Job failed with: TimeoutError
+```
+Required fields:
+
+message_id, job_id, retry_count, duration, status, error
+
+
