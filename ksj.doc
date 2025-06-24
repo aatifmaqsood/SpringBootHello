@@ -35,3 +35,41 @@ On Success On Success On Failure
 | | |
 Delete SQS Msg Terminate Pod Let message timeout (remain in
 queue)
+
+
+
+    +------------------------------+
+          |     Kubernetes Scaling Job   |
+          |    (KSJ Worker Container)    |
+          +------------------------------+
+                            |
+                            v
+             +------------------------------+
+             |  Read Message from SQS       |  ← Visibility Timeout Starts
+             +------------------------------+
+                            |
+                            v
+             +------------------------------+
+             |  Start Background Thread     |
+             |  to Extend Visibility        |
+             +------------------------------+
+                            |
+                            v
+             +------------------------------+
+             |  Execute Job Logic           |
+             |  (e.g. process order, image) |
+             +------------------------------+
+                            |
+            / \                             \
+           /   \                             \ SIGTERM received?
+   Success     Failure                        → Set shutdown_event
+     |             |                          → Do NOT delete message
+     |             v
+     |     +-----------------------------+
+     |     |  Log Error, Let Timeout Expire
+     |     +-----------------------------+
+     |
+     v
++-----------------------------+
+|   Delete Message from SQS   |
++-----------------------------+
