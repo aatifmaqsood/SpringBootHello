@@ -219,5 +219,31 @@ This prevents it from being reprocessed.
 
 Note: Only delete after successful processing.
 
+3) Handling SIGTERM:
+When Kubernetes terminates a pod (e.g., scaling down or job completion), it sends a SIGTERM signal to give the container a chance to shut down cleanly before forcibly killing it with SIGKILL.
 
+Without handling SIGTERM:
+
+> our worker might exit mid-processing
+
+> The message might get lost or never reappear (if deleted too early)
+
+Every long-running loop (like the message processor or visibility extender) checks shutdown_event.is_set():
+
+```
+while elapsed < total_processing_time and not shutdown_event.is_set():
+```
+As soon as SIGTERM is received, shutdown_event is set
+```
+while not shutdown_event.is_set():
+```
+All loops will gracefully break out, log exit, and stop processing
+
+Our Logic should integrates graceful SIGTERM handling correctly:
+
+> Catches the signal
+
+> Signals all threads to stop
+
+> Skips deleting the message on early termination
 
