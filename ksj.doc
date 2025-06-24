@@ -95,3 +95,24 @@ response = sqs.receive_message(
     VisibilityTimeout=VISIBILITY_TIMEOUT  # <-- Initial visibility timeout
 )
 ```
+
+Dynamic Extension:
+```
+EXTEND_INTERVAL = int(os.getenv("VISIBILITY_EXTENSION_INTERVAL", 10))  # every 10s
+EXTEND_BY = int(os.getenv("EXTEND_BY", 30))  # extend by 30s
+
+def extend_visibility_timeout():
+    while not shutdown_event.is_set():
+        time.sleep(EXTEND_INTERVAL)
+        if receipt_handle:
+            try:
+                logging.info(f"Extending visibility timeout by {EXTEND_BY}s")
+                sqs.change_message_visibility(
+                    QueueUrl=QUEUE_URL,
+                    ReceiptHandle=receipt_handle,
+                    VisibilityTimeout=EXTEND_BY
+                )
+            except Exception as e:
+                logging.error(f"Failed to extend visibility timeout: {e}")
+```
+A background thread runs every EXTEND_INTERVAL to extend the timeout while the job is still working.
