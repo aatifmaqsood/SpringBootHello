@@ -116,3 +116,24 @@ def extend_visibility_timeout():
                 logging.error(f"Failed to extend visibility timeout: {e}")
 ```
 A background thread runs every EXTEND_INTERVAL to extend the timeout while the job is still working.
+
+
+On Failure – Do Not Delete Message
+```
+try:
+    process_message(message_body)
+
+    if shutdown_event.is_set():
+        logging.warning("Job interrupted. Message will return to queue.")
+    else:
+        logging.info("Deleting message from queue")
+        sqs.delete_message(
+            QueueUrl=QUEUE_URL,
+            ReceiptHandle=receipt_handle
+        )
+
+except Exception as e:
+    logging.error(f"Job failed with exception: {e}")
+    # Message is NOT deleted — becomes visible again after timeout
+```
+If the job crashes or is interrupted (SIGTERM), the message is left in SQS and reappears after timeout.
