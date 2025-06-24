@@ -83,3 +83,15 @@ Implementation Guidelines
 | **Maximum Timeout**   | Should match max expected processing time (e.g., 10 minutes)          |
 | **On Failure**        | Don’t delete message – let it become visible again after timeout      |
 
+
+Initial Timeout (30 seconds)
+
+```VISIBILITY_TIMEOUT = int(os.getenv("INITIAL_VISIBILITY_TIMEOUT", 30))  # Default 30s
+
+response = sqs.receive_message(
+    QueueUrl=QUEUE_URL,
+    MaxNumberOfMessages=1,
+    WaitTimeSeconds=10,
+    VisibilityTimeout=VISIBILITY_TIMEOUT  # <-- Initial visibility timeout
+)
+```
