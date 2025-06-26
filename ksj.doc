@@ -284,15 +284,27 @@ Required fields:
 message_id, job_id, retry_count, duration, status, error
 
 5) Keda Configurations:
-| Setting                       | Recommended Default             | Description                            |
-| ----------------------------- | ------------------------------- | -------------------------------------- |
-| `pollingInterval`             | `10s`                           | Frequency of checking SQS for messages |
-| `cooldownPeriod`              | `30s`                           | Time to wait before scaling down jobs  |
-| `minReplicaCount`             | `0`                             | No idle jobs running                   |
-| `maxReplicaCount`             | Set to match queue scale limits |                                        |
-| `scaledJob.concurrencyPolicy` | `Forbid`                        | Prevent parallel jobs on same message  |
-| `jobTargetRef.backoffLimit`   | `3`                             | Number of retries on job failure       |
+This configuration defines how the KSJ sample app integrates with KEDA ScaledJob for scaling behavior.
+These values are reference defaults for this sample pattern. Actual values should be adjusted based on your job’s behavior, retry policy, and cost/resource tradeoffs.
 
+| Setting                       | Recommended Default             | Description                                                             |
+| ----------------------------- | ------------------------------- | ------------------------------------------------------------------------|
+| `pollingInterval`             | `10s`                           | Frequency at which KEDA checks SQS for pending messages                 |
+| `minReplicaCount`             | `0`                             |Zero idle pods; scale from zero                                          |
+| `maxReplicaCount`             | Set to match queue scale limits |Maximum parallel job pods allowed                                        |                                       |
+| `scaledJob.concurrencyPolicy` | `Forbid`                        | Prevents more than one job processing the same message                  |
+| `jobTargetRef.backoffLimit`   | `0`                             | Retries not needed — let SQS redelivery handle failed jobs              |
+|  `successfulJobsHistoryLimit` | `2`                             | Keeps last 2 completed jobs (adjust as needed for debugging/monitoring) |
+| `failedJobsHistoryLimit`      | `2`                             | Keeps last 2 failed jobs (adjust as needed for debugging/monitoring)    |
+
+Notes on Guidance
+1) Set backoffLimit: 0 if your message is reprocessed by SQS — this avoids Kubernetes retries that might conflict with message reappearance
+
+2) Set successfulJobsHistoryLimit / failedJobsHistoryLimit based on debugging needs vs. resource cleanup
+
+3) Use concurrencyPolicy: Forbid to avoid concurrent duplicate processing
+
+4) Prefer the accurate scaling strategy for better control
 ```
 apiVersion: keda.sh/v1alpha1
 kind: ScaledJob
@@ -304,8 +316,10 @@ spec:
   failedJobsHistoryLimit: 2
   maxReplicaCount: 10
   jobTargetRef:
-    backoffLimit: 3
     parallelism: 1
+    backoffLimit: 0  # Let SQS handle retries instead of Kubernetes
+  strategy:
+    strategy: "accurate"
   triggers:
     - type: aws-sqs-queue
       metadata:
