@@ -327,3 +327,29 @@ spec:
         awsRegion: us-east-1
 
 ```
+Logging:
+Use structured logs, ideally in JSON, for parsing in tools like Fluent Bit → Splunk  / CloudWatch.
+| Stage                       | Log Example / Message                                     |
+| --------------------------- | --------------------------------------------------------- |
+| Job Start                   | `"Starting KSJ job execution"`                            |
+| SQS Polling                 | `"Polling SQS for message"`                               |
+| Message Received            | `"Received message with ID: 123abc"`                      |
+| Message Processing Started  | `"Started processing message: {...}"`                     |
+| Visibility Timeout Extended | `"Extending visibility timeout by 30s"`                   |
+| Processing Success          | `"Successfully processed message"`                        |
+| Message Deleted             | `"Message deleted from SQS"`                              |
+| Job Interrupted (SIGTERM)   | `"Received SIGTERM. Job interrupted."`                    |
+| Exception / Failure         | `"Exception occurred during message processing: <error>"` |
+
+Include contextual fields:
+
+messageId, jobId, timestamp, status, queueName, durationMs, region
+
+Metrics: use metrics for job health and throughput
+| Metric                        | Use                                                                   |
+| ----------------------------- | --------------------------------------------------------------------- |
+| `job_start_total`             | Count of job starts                                                   |
+| `job_success_total`           | Count of successful message processing                                |
+| `job_failure_total`           | Count of failed jobs                                                  |
+| `job_duration_seconds`        | Histogram of job processing time                                      |
+| `visibility_extensions_total` | Number of visibility extensions (to catch anomalies or infinite jobs) |
