@@ -86,10 +86,11 @@ queue)
 
 Implementation Guidelines
 1. Message Visibility Timeout:
+The sample KSJ worker uses Amazon SQS visibility timeout to ensure messages are not processed by more than one worker simultaneously. This section outlines how timeouts are configured and dynamically extended during job execution.
 | Feature               | Recommendation                                                        |
 | --------------------- | --------------------------------------------------------------------- |
 | **Initial Timeout**   | 30–60 seconds (via `ReceiveMessage`)                                  |
-| **Dynamic Extension** | Yes – Extend during long processing using `ChangeMessageVisibility` |
+| **Dynamic Extension** | Use if job duration is variable or long                               |
 | **Maximum Timeout**   | Should match max expected processing time (e.g., 10 minutes)          |
 | **On Failure**        | Don’t delete message – let it become visible again after timeout      |
 
@@ -105,6 +106,8 @@ response = sqs.receive_message(
     VisibilityTimeout=VISIBILITY_TIMEOUT  # <-- Initial visibility timeout
 )
 ```
+Recommendation:
+Set the initial visibility timeout between 30–60 seconds — long enough for most short jobs, but short enough to allow retries if the job crashes quickly.
 
 Dynamic Extension:
 ```
@@ -126,7 +129,16 @@ def extend_visibility_timeout():
                 logging.error(f"Failed to extend visibility timeout: {e}")
 ```
 A background thread runs every EXTEND_INTERVAL to extend the timeout while the job is still working.
+Recommendation for Dynamic Extension:
+We recommend dynamic visibility timeout only if:
 
+1) Our job has variable processing times, and static timeouts would be inefficient
+
+2) We want faster recovery from job crashes (e.g., via retry within 30s instead of waiting full max timeout)
+
+3) We are not using FIFO queues with deduplication delay issues
+
+4) If Our job always takes 60 seconds, we may skip dynamic extension and just set VisibilityTimeout=60.
 
 On Failure – Do Not Delete Message
 ```
