@@ -10,6 +10,16 @@ Summary
 5) Provide observability through structured logs
 6) Be resilient to failures and handle graceful shutdowns
 
+
+updated summary:
+This KSJ sample app is designed to:
+
+1) Process a single message from SQS per job execution
+2) Use KEDA to dynamically scale jobs based on SQS queue depth
+3) Extend message visibility timeout dynamically during long-running processing
+4) Handle SIGTERM signals gracefully to avoid silent message loss
+5) Provide structured logs compatible with Fluent Bit → Splunk or other observability pipelines
+
 Reference Workflow:
 ***
 +-------------+ +------------+ +----------------+
