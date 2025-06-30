@@ -158,6 +158,45 @@ except Exception as e:
     logging.error(f"Job failed with exception: {e}")
     # Message is NOT deleted — becomes visible again after timeout
 ```
+
+
+
+-------------------------------------------
+
+Rationale Behind This Recommendation
+The key idea behind dynamic visibility timeout is balancing between processing safety and retry latency:
+
+1) Without it: A failed job may block the message for the entire static timeout (e.g., 600s), delaying retry or DLQ routing.
+
+2) With it: We start with a shorter timeout (e.g., 30s), and extend only as needed while the job is actively working.
+
+This:
+
+A) Reduces time-to-retry on failure
+
+B) Prevents duplicate delivery during long processing
+
+C) Avoids overestimating timeout for all jobs (which wastes time on failure paths)
+
+D) Keeps jobs simple — We only need to know the message is still in-flight, not how long it will take
+
+
+When Not to Use It?
+A) If Our job processing time is always known and consistent, just set a static VisibilityTimeout = max processing time.
+
+B) If using FIFO queues where deduplication delay causes issues, prefer a consistent visibility timeout.
+
+
+
+-----------------------------------------------
+
+
+
+
+
+
+
+
 If the job crashes or is interrupted (SIGTERM), the message is left in SQS and reappears after timeout.
 
 
@@ -241,6 +280,124 @@ This prevents it from being reprocessed.
 
 Note: Only delete after successful processing.
 
+
+
+----------------------------------------------------------
+2. Read → Process → Delete: Message Lifecycle 
+This section highlights the standard pattern used in Kubernetes Scaling Jobs (KSJs) for processing AWS SQS messages reliably.
+lifecycle ensures:
+
+Each job processes only one message
+
+Messages are not lost or duplicated
+
+Dynamic extension ensures efficient processing
+
+Failed or interrupted jobs will not delete the message
+
+a) Read Message:
+```
+ReceiveMessageRequest request = ReceiveMessageRequest.builder()
+        .queueUrl(QUEUE_URL)
+        .maxNumberOfMessages(1)
+        .visibilityTimeout(INITIAL_VISIBILITY_TIMEOUT)  // e.g., 30s
+        .waitTimeSeconds(10) // long polling
+        .build();
+
+List<Message> messages = sqs.receiveMessage(request).messages();
+
+if (messages.isEmpty()) {
+    System.out.println("No messages received.");
+    return;
+}
+Message message = messages.get(0);
+String receiptHandle = message.receiptHandle();
+System.out.println("Received message: " + message.body());
+```
+
+Explanation:
+maxNumberOfMessages = 1 ensures one message per job, making job processing isolated and scalable.
+
+visibilityTimeout = 30s ensures the message is invisible to others during processing.
+
+If the message is not deleted, it becomes visible again for retry.
+
+b) Process Message with Dynamic Timeout Extension
+```
+AtomicBoolean shutdown = new AtomicBoolean(false);
+int totalProcessingTime = 60;
+int elapsed = 0;
+
+Thread extender = new Thread(() -> {
+    while (!shutdown.get()) {
+        try {
+            Thread.sleep(EXTEND_INTERVAL * 1000);  // e.g., every 10s
+            System.out.println("Extending visibility by " + EXTEND_BY + " seconds");
+            sqs.changeMessageVisibility(ChangeMessageVisibilityRequest.builder()
+                    .queueUrl(QUEUE_URL)
+                    .receiptHandle(receiptHandle)
+                    .visibilityTimeout(EXTEND_BY)  // extend by 30s
+                    .build());
+        } catch (Exception e) {
+            System.err.println("Failed to extend visibility: " + e.getMessage());
+        }
+    }
+});
+extender.start();
+
+// Simulated processing
+while (elapsed < totalProcessingTime && !shutdown.get()) {
+    Thread.sleep(EXTEND_INTERVAL * 1000); // simulate work
+    elapsed += EXTEND_INTERVAL;
+    System.out.println("Processing... " + elapsed + "/" + totalProcessingTime);
+}
+
+```
+Dynamic Timeout Parameters
+| Parameter                    | Purpose                                          |
+| ---------------------------- | ------------------------------------------------ |
+| `INITIAL_VISIBILITY_TIMEOUT` | How long to hide message initially (e.g., 30s)   |
+| `EXTEND_INTERVAL`            | How often to extend visibility (e.g., every 10s) |
+| `EXTEND_BY`                  | By how much to extend each time (e.g., 30s)      |
+
+Why Dynamic Extension?
+Scenario-Based Examples:
+| Scenario                                      | Why Dynamic Timeout Helps                            |
+| --------------------------------------------- | ---------------------------------------------------- |
+| Processing time varies between 10s and 2 mins | Set short initial timeout and extend dynamically     |
+| Pod crashes at 20s during a 90s task          | Message reappears in \~30s instead of waiting 90s    |
+| Some messages are fast (10s), some slow (60s) | Don’t block the queue with unnecessary long timeouts |
+
+c) Delete Message After Successful Processing
+```
+if (!shutdown.get()) {
+    System.out.println("Deleting message from SQS...");
+    sqs.deleteMessage(DeleteMessageRequest.builder()
+            .queueUrl(QUEUE_URL)
+            .receiptHandle(receiptHandle)
+            .build());
+} else {
+    System.out.println("Processing interrupted. Message will return to the queue.");
+}
+shutdown.set(true);
+extender.join();
+
+```
+Key Rule:
+a) Only delete if job completes successfully and was not interrupted.
+
+b) If the job fails or receives a SIGTERM, the message will reappear after timeout for retry or DLQ handling.
+
+
+
+-------------------------------------------------------------
+
+
+
+
+
+
+
 3) Handling SIGTERM:
 When Kubernetes terminates a pod (e.g., scaling down or job completion), it sends a SIGTERM signal to give the container a chance to shut down cleanly before forcibly killing it with SIGKILL.
 
@@ -269,6 +426,224 @@ Our Logic should integrates graceful SIGTERM handling correctly:
 
 > Skips deleting the message on early termination
 
+
+
+------------------------------------------------------
+
+3) Handling SIGTERM & Graceful Shutdown
+In Kubernetes, when a pod is terminated (due to scale-down, job completion, or eviction), the container receives a SIGTERM signal. This is the opportunity for the container to gracefully shut down, clean up resources, and avoid message loss.
+
+Why it matters
+Without handling SIGTERM:
+
+The job may be interrupted mid-processing
+
+The message might be partially processed and then lost or redelivered unexpectedly
+
+The worker might delete the message too early, even if it didn’t finish the job.
+
+Step-by-Step Workflow:
+> A shared flag (AtomicBoolean shutdown) is used across threads.
+
+> When Kubernetes sends a SIGTERM, Spring Boot triggers @PreDestroy.
+
+> The flag is set to true.
+
+> All long-running loops check the flag and exit cleanly when shutdown begins.
+
+shutdown handler:
+```
+import javax.annotation.PreDestroy;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.springframework.stereotype.Component;
+
+@Component
+public class GracefulShutdownHandler {
+
+    private final AtomicBoolean shutdown = new AtomicBoolean(false);
+
+    @PreDestroy
+    public void onShutdown() {
+        shutdown.set(true);
+        System.out.println("[SHUTDOWN] SIGTERM received. Stopping gracefully...");
+        // Add any cleanup code here: close DBs, flush logs, etc.
+    }
+
+    public boolean isShuttingDown() {
+        return shutdown.get();
+    }
+}
+```
+
+with our processing loop:
+
+```
+@Autowired
+private GracefulShutdownHandler shutdownHandler;
+
+public void processMessage(String body, String receiptHandle) {
+    int totalProcessingTime = 60;
+    int elapsed = 0;
+
+    while (elapsed < totalProcessingTime && !shutdownHandler.isShuttingDown()) {
+        try {
+            Thread.sleep(EXTEND_INTERVAL * 1000);  // Simulate work
+            elapsed += EXTEND_INTERVAL;
+            System.out.println("Processing... " + elapsed + "/" + totalProcessingTime + " seconds");
+
+            // Extend visibility timeout here
+            sqs.changeMessageVisibility(ChangeMessageVisibilityRequest.builder()
+                    .queueUrl(QUEUE_URL)
+                    .receiptHandle(receiptHandle)
+                    .visibilityTimeout(EXTEND_BY)
+                    .build());
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.err.println("Interrupted while processing");
+            break;
+        }
+    }
+
+    if (shutdownHandler.isShuttingDown()) {
+        System.out.println("Graceful shutdown triggered. Skipping message deletion.");
+    } else {
+        System.out.println("Finished. Deleting message.");
+        sqs.deleteMessage(DeleteMessageRequest.builder()
+                .queueUrl(QUEUE_URL)
+                .receiptHandle(receiptHandle)
+                .build());
+    }
+}
+```
+Key Points:
+| Element                       | Description                                                     |
+| ----------------------------- | --------------------------------------------------------------- |
+| `@PreDestroy`                 | Called automatically on SIGTERM in Spring Boot                  |
+| `AtomicBoolean` shutdown flag | Shared across worker & background threads                       |
+| Graceful loop check           | Every loop (`while`) checks `!shutdownHandler.isShuttingDown()` |
+| Skips deletion                | Ensures we **don’t delete** the message if job was interrupted  |
+
+
+PreStop Hook Snippet for Alerts
+What is it?
+The preStop hook gives the container a final notification before shutdown. This allows us to:
+
+> Log shutdown intent clearly (which can be picked up by Splunk alerts).
+
+> Set flags or drain messages before SIGKILL.
+
+kuberentes yaml sample:
+
+```
+lifecycle:
+  preStop:
+    exec:
+      command: ["/bin/sh", "-c", "echo 'Shutting down pod gracefully' >> /var/log/app/shutdown.log"]
+```
+
+How this helps app teams:
+
+> Allows deterministic cleanup before termination.
+
+> Logs from preStop can be monitored in Splunk for alerting on abnormal shutdowns.
+
+> App teams get visibility and time to gracefully drain workloads.
+
+terminationGracePeriodSeconds:
+kubernetes yaml sample:
+```
+spec:
+  terminationGracePeriodSeconds: 60
+```
+Why 60 seconds?
+
+> Default is 30s, which might be insufficient sometimes for message processing or cleanup.
+
+> 60s allows enough time for:
+
+    >Message completion
+
+    >Flushing logs
+
+    >Resource cleanup
+
+How this fits into workflow:
+
+> Kubernetes sends SIGTERM.
+
+> App receives signal and starts shutdown logic.
+
+> App completes in-flight tasks or logs intent.
+
+> If it exceeds terminationGracePeriodSeconds, Kubernetes forcefully sends SIGKILL.
+
+We can configure this per deployment via Helm chart values:
+helm sample yaml
+```
+terminationGracePeriodSeconds: {{ .Values.app.terminationGracePeriodSeconds | default 60 }}
+```
+
+Java / Spring Boot Example
+In Java, particularly with Spring Boot, graceful shutdown is typically done using a @PreDestroy method or a shutdown hook.
+
+Spring Boot SIGTERM Handling Example
+
+```
+import org.springframework.stereotype.Component;
+import javax.annotation.PreDestroy;
+
+@Component
+public class GracefulShutdownManager {
+
+    private volatile boolean shuttingDown = false;
+
+    public boolean isShuttingDown() {
+        return shuttingDown;
+    }
+
+    @PreDestroy
+    public void onShutdown() {
+        shuttingDown = true;
+        System.out.println("SIGTERM received. Initiating graceful shutdown...");
+        // Example: stop consuming new messages, finish current work
+        // Avoid deleting messages from queue until processing completes
+    }
+}
+```
+
+Thread-safe Usage in Worker Loops
+```
+while (!shutdownManager.isShuttingDown()) {
+    // Fetch message
+    // Process safely
+}
+System.out.println("Graceful exit completed.");
+```
+Summary of Recommendations
+
+| Item                            | Recommendation                                                | Benefit                      |
+| ------------------------------- | ------------------------------------------------------------- | ---------------------------- |
+| `preStop` hook                  | Log shutdown events                                           | Alerts, observability        |
+| `terminationGracePeriodSeconds` | Set to 60 seconds                                             | Gives time for cleanup       |
+| Signal handling                 | Use `@PreDestroy` or `Runtime.getRuntime().addShutdownHook()` | Safe termination             |
+| Logging                         | Ensure shutdown logs are visible                              | Helps in debugging, alerting |
+| Queue behavior                  | Avoid deleting message on shutdown                            | Prevent message loss         |
+
+
+
+
+----------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
 4)Logging 
 All logs must be written to stdout
 
@@ -282,6 +657,85 @@ Use structured log format:
 Required fields:
 
 message_id, job_id, retry_count, duration, status, error
+
+
+
+-----------------------------------------------------------
+4) Observability & Logging
+Logging Best Practices
+All logs must be written to stdout in a structured log format for compatibility with log aggregation tools like Splunk, CloudWatch, or ELK.
+
+Recommended pattern:
+<timestamp> | <level> | <message> | <contextual fields>
+
+Example:
+2025-06-23T10:00:00Z | INFO  | Started processing message            | message_id=abc123 job_id=job789 retry_count=1
+2025-06-23T10:00:05Z | INFO  | Extending message visibility by 30s  | message_id=abc123 job_id=job789
+2025-06-23T10:00:15Z | WARN  | SIGTERM received, shutting down      | job_id=job789
+2025-06-23T10:00:20Z | ERROR | Job failed                           | message_id=abc123 job_id=job789 error=TimeoutException duration=12000ms
+
+Required Fields in Logs
+Make sure to include these fields in relevant log statements:
+
+> message_id
+
+> job_id
+
+> retry_count
+
+> duration (in milliseconds)
+
+> status
+
+> error (if applicable)
+
+sample log snippets:
+```
+logger.info("Started processing message", kv("message_id", msgId), kv("job_id", jobId), kv("retry_count", retryCount));
+logger.info("Extending message visibility by 30 seconds", kv("message_id", msgId), kv("job_id", jobId));
+logger.warn("Shutdown signal received, processing will stop gracefully", kv("job_id", jobId));
+logger.error("Job failed", kv("message_id", msgId), kv("job_id", jobId), kv("error", exception), kv("duration", duration));
+```
+Use a structured logger like logstash-logback-encoder, SLF4J with MDC, or similar for consistent key-value output.
+
+Key Metrics to Track
+Metrics help us understand performance and reliability trends over time.
+
+| Metric                                        | Description                            |
+| --------------------------------------------- | -------------------------------------- |
+| **`processing_duration_ms`**                  | Time taken to process a message        |
+| **`retry_count`**                             | Number of times a job was retried      |
+| **`message_visibility_extensions`**           | Count of visibility extension requests |
+| **`job_success_count` / `job_failure_count`** | Success/failure metrics                |
+| **`sigterm_received_count`**                  | Tracks shutdown signals received       |
+
+example metric Logging:
+```
+long duration = System.currentTimeMillis() - startTime;
+logger.info("Finished processing", kv("message_id", msgId), kv("job_id", jobId), kv("duration", duration), kv("status", "success"));
+```
+
+Dashboards and Monitoring Recommendations
+To ensure complete visibility into job performance and pod stability:
+
+> OOMKilled Dashboard
+Monitor memory usage trends and track containers terminated with OOMKilled status.
+Recommended: Use Prometheus + Grafana or Cloud-native dashboards like GKE Workload Details.
+
+> Job Failure Dashboard
+Track:
+
+  > Job error types (Timeout, Exception, etc.)
+
+  > Frequency of retries
+
+  > Duration before failure
+
+  > Message IDs of failed jobs
+
+
+---------------------------------------------------------------------
+
 
 5) Keda Configurations:
 This configuration defines how the KSJ sample app integrates with KEDA ScaledJob for scaling behavior.
