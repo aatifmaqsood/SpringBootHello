@@ -106,6 +106,50 @@ response = sqs.receive_message(
     VisibilityTimeout=VISIBILITY_TIMEOUT  # <-- Initial visibility timeout
 )
 ```
+
+java sample code:
+```
+import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
+import software.amazon.awssdk.services.sqs.model.Message;
+import software.amazon.awssdk.regions.Region;
+import java.util.List;
+
+public class SqsReceiver {
+
+    private static final String QUEUE_URL = System.getenv("QUEUE_URL");
+    private static final int INITIAL_VISIBILITY_TIMEOUT = Integer.parseInt(
+        System.getenv().getOrDefault("INITIAL_VISIBILITY_TIMEOUT", "30")  // Default 30 seconds
+    );
+
+    public static void main(String[] args) {
+        SqsClient sqsClient = SqsClient.builder()
+                .region(Region.of("us-east-1")) // Set region appropriately
+                .build();
+
+        ReceiveMessageRequest receiveRequest = ReceiveMessageRequest.builder()
+                .queueUrl(QUEUE_URL)
+                .maxNumberOfMessages(1)
+                .waitTimeSeconds(10)
+                .visibilityTimeout(INITIAL_VISIBILITY_TIMEOUT)
+                .build();
+
+        List<Message> messages = sqsClient.receiveMessage(receiveRequest).messages();
+
+        if (messages.isEmpty()) {
+            System.out.println("No messages received.");
+        } else {
+            Message message = messages.get(0);
+            System.out.println("Received message: " + message.body());
+            // Process your message here
+        }
+
+        sqsClient.close();
+    }
+}
+```
+
+
 Recommendation:
 Set the initial visibility timeout between 30–60 seconds — long enough for most short jobs, but short enough to allow retries if the job crashes quickly.
 
@@ -128,6 +172,105 @@ def extend_visibility_timeout():
             except Exception as e:
                 logging.error(f"Failed to extend visibility timeout: {e}")
 ```
+1*************
+java sample code:
+```
+import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.model.ChangeMessageVisibilityRequest;
+
+import java.util.concurrent.atomic.AtomicBoolean;
+
+@Slf4j
+@Component
+public class VisibilityExtender {
+
+    private final int EXTEND_INTERVAL = Integer.parseInt(System.getenv().getOrDefault("VISIBILITY_EXTENSION_INTERVAL", "10")); // seconds
+    private final int EXTEND_BY = Integer.parseInt(System.getenv().getOrDefault("EXTEND_BY", "30")); // seconds
+
+    private final SqsClient sqsClient;
+    private final String queueUrl = System.getenv("QUEUE_URL");
+    private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
+    private Thread extensionThread;
+
+    public VisibilityExtender(SqsClient sqsClient) {
+        this.sqsClient = sqsClient;
+    }
+
+    public void start(String receiptHandle) {
+        extensionThread = new Thread(() -> {
+            try {
+                while (!shuttingDown.get()) {
+                    Thread.sleep(EXTEND_INTERVAL * 1000L);
+
+                    if (receiptHandle != null && !shuttingDown.get()) {
+                        log.info("Extending visibility timeout by {}s", EXTEND_BY);
+
+                        ChangeMessageVisibilityRequest req = ChangeMessageVisibilityRequest.builder()
+                                .queueUrl(queueUrl)
+                                .receiptHandle(receiptHandle)
+                                .visibilityTimeout(EXTEND_BY)
+                                .build();
+
+                        try {
+                            sqsClient.changeMessageVisibility(req);
+                        } catch (Exception e) {
+                            log.error("Failed to extend visibility timeout", e);
+                        }
+                    }
+                }
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                log.warn("Visibility extension thread interrupted");
+            }
+        });
+
+        extensionThread.setDaemon(true);
+        extensionThread.start();
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        log.warn("Shutdown signal received. Stopping visibility extension.");
+        shuttingDown.set(true);
+        if (extensionThread != null && extensionThread.isAlive()) {
+            extensionThread.interrupt();
+        }
+    }
+}
+```
+
+Usage in a Message Processing Service
+```
+@Component
+public class MessageProcessor {
+
+    private final VisibilityExtender visibilityExtender;
+
+    public MessageProcessor(VisibilityExtender visibilityExtender) {
+        this.visibilityExtender = visibilityExtender;
+    }
+
+    public void processMessage(String messageBody, String receiptHandle) {
+        visibilityExtender.start(receiptHandle);
+
+        try {
+            // Your message processing logic here
+            // Simulate work
+            Thread.sleep(45000); // 45s
+
+            // After successful processing, delete the message
+            // (not shown here — use SqsClient.deleteMessage)
+
+        } catch (Exception e) {
+            // log and let the message become visible again
+        }
+    }
+}
+```
+1*********
 A background thread runs every EXTEND_INTERVAL to extend the timeout while the job is still working.
 Recommendation for Dynamic Extension:
 We recommend dynamic visibility timeout only if:
@@ -361,13 +504,21 @@ Dynamic Timeout Parameters
 | `EXTEND_BY`                  | By how much to extend each time (e.g., 30s)      |
 
 Why Dynamic Extension?
-Scenario-Based Examples:
-| Scenario                                      | Why Dynamic Timeout Helps                            |
-| --------------------------------------------- | ---------------------------------------------------- |
-| Processing time varies between 10s and 2 mins | Set short initial timeout and extend dynamically     |
-| Pod crashes at 20s during a 90s task          | Message reappears in \~30s instead of waiting 90s    |
-| Some messages are fast (10s), some slow (60s) | Don’t block the queue with unnecessary long timeouts |
 
+3**************************
+Scenario-Based Examples:
+
+
+| Scenario                                                                 | Expected Behavior                                                                                          |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| **Job takes 90s, initial timeout is 30s**                             | Visibility is extended every 10s → message never becomes visible prematurely.                              |
+| **Pod crashes at 20s with 30s timeout**                               | Message reappears after \~30s for retry → fast recovery. No manual retry logic needed.                     |
+| **Job takes between 10s–120s depending on payload**                   | Short timeout + dynamic extension = fast retry on crash and no over-blocking on short messages.            |
+| **Static timeout of 600s for all jobs, even if many complete in 20s** | Wastes queue time → dynamic extension reduces queue wait time, making fast jobs reattemptable sooner.      |
+| **SIGTERM received during processing at 45s of a 60s task**            | `shutdown` flag avoids deleting the message → it becomes visible again safely after last extended timeout. |
+| **Downstream system is slow (e.g., payment API delay)**                | Visibility extension keeps message invisible for longer → avoids early retry and duplicate API calls.      |
+
+3****************************
 c) Delete Message After Successful Processing
 ```
 if (!shutdown.get()) {
@@ -387,6 +538,8 @@ Key Rule:
 a) Only delete if job completes successfully and was not interrupted.
 
 b) If the job fails or receives a SIGTERM, the message will reappear after timeout for retry or DLQ handling.
+
+
 
 
 
@@ -743,10 +896,9 @@ These values are reference defaults for this sample pattern. Actual values shoul
 
 | Setting                       | Recommended Default             | Description                                                             |
 | ----------------------------- | ------------------------------- | ------------------------------------------------------------------------|
-| `pollingInterval`             | `10s`                           | Frequency at which KEDA checks SQS for pending messages                 |
+| `pollingInterval`             | `30s`                           | Frequency at which KEDA checks SQS for pending messages                 |
 | `minReplicaCount`             | `0`                             |Zero idle pods; scale from zero                                          |
 | `maxReplicaCount`             | Set to match queue scale limits |Maximum parallel job pods allowed                                        |                                       |
-| `scaledJob.concurrencyPolicy` | `Forbid`                        | Prevents more than one job processing the same message                  |
 | `jobTargetRef.backoffLimit`   | `0`                             | Retries not needed — let SQS redelivery handle failed jobs              |
 |  `successfulJobsHistoryLimit` | `2`                             | Keeps last 2 completed jobs (adjust as needed for debugging/monitoring) |
 | `failedJobsHistoryLimit`      | `2`                             | Keeps last 2 failed jobs (adjust as needed for debugging/monitoring)    |
@@ -759,28 +911,97 @@ Notes on Guidance
 3) Use concurrencyPolicy: Forbid to avoid concurrent duplicate processing
 
 4) Prefer the accurate scaling strategy for better control
+2*******
+pollingInterval: If we expect lower traffic or cost optimization is a higher priority, increasing the interval to 30 seconds is valid and reduces unnecessary polling.
+However, we may experience a slight increase in message processing latency, which should be acceptable in non-time-critical workflows.
+For Dev/Test we may consider 10 seconds for faster feedback but for Prod 30 seconds (or more) for efficiency is acceptable.
+
+scalingStrategy: The scalingStrategy: accurate setting is a Kubernetes HPA/KEDA-style directive (depending on implementation) that prioritizes precision over speed when scaling applications. It calculates required replicas based on actual metrics (like CPU, memory, queue length, etc.), ensuring the pod count is finely tuned to demand.
+
+scalingStrategy types and when to use what:
+| Strategy                | When to Use                                         | Characteristics                                     |
+| ----------------------- | --------------------------------------------------- | --------------------------------------------------- |
+| `accurate`              | Default for cost efficiency and stability           | Conservative scaling, based on actual metrics       |
+| `default`               | Quick setup when metrics or tuning aren't available | May not be optimal for spiky traffic                |
+| `aggressive`            | For latency-critical or bursty workloads            | Scales up quickly, might over-provision temporarily |
+| `custom` (if supported) | When specific heuristics are needed                 | Fully customizable scaling behavior                 |
+
+Recommendation
+Stick with accurate for:
+    > Production workloads
+    > Queued systems (SQS, Kafka, etc.)
+    > Jobs where cost-efficiency and stable throughput matter
+We’ve chosen scalingStrategy: accurate as the default because:
+
+> Predictable Scaling Behavior: Prevents over-scaling or under-scaling, which is especially critical in cost-sensitive or resource-constrained environments.
+
+> Stabilizes workloads: Reduces flapping (constant scaling up/down), which can happen with more aggressive strategies.
+
+> Metric-aware decisions: Accurate strategy uses real-time metrics (e.g., queue depth, CPU), ensuring pods scale only when truly necessary.
+
+> Ideal for background jobs / workers: These often have variable load — accurate helps maintain just the right number of workers.
+
+restartPolicy: Never
+> Ensures failed pods are not restarted by Kubernetes.
+
+> Once the pod finishes (successfully or with failure), it terminates permanently.
+
+> Aligns with event-driven jobs: one trigger = one job = one execution.
+
+backoffLimit: 0
+> Ensures no retries are attempted by the Job controller upon failure.
+
+> The Job is marked as Failed immediately after one unsuccessful attempt.
+
+When to Use preventJobRestart: true
+Use this setting when:
+
+    > Retrying is unsafe or undesirable (e.g., payment processing, downstream irreversible actions).
+
+    > You want fast failure visibility for debugging/logging.
+
+    > Errors are known to be non-transient (e.g., malformed input, missing config).
+
+    > You have external logic (like message requeue) to handle retries safely.
+
+Example use cases:
+    > Processing non-idempotent messages from a queue.
+
+    > One-off executions where a single failure should trigger alerts or reprocessing externally.
+
+    > Validation-only jobs.
+
 ```
 apiVersion: keda.sh/v1alpha1
 kind: ScaledJob
 metadata:
-  name: my-sqs-worker
+  name: message-processor
 spec:
-  pollingInterval: 10
-  successfulJobsHistoryLimit: 2
-  failedJobsHistoryLimit: 2
-  maxReplicaCount: 10
+  pollingInterval: 30                            # Check every 30s for new work
+  successfulJobsHistoryLimit: 2                  # Retain history of last 2 successful jobs
+  scalingStrategy: accurate                      # Avoid over/under-scaling
   jobTargetRef:
-    parallelism: 1
-    backoffLimit: 0  # Let SQS handle retries instead of Kubernetes
-  strategy:
-    strategy: "accurate"
+    parallelism: 1                               # The maximum number of pods running in parallel for a Job.
+    completions: 1                               # The total number of pods that must succeed before the Job ends.
+    backoffLimit: 0                              # Fail fast, no retries
+    template:
+      spec:
+        restartPolicy: Never                     # Do not restart failed pods
+        containers:
+          - name: processor
+            image: my-registry/worker:latest
+            env:
+              - name: MESSAGE_QUEUE
+                value: my-queue
   triggers:
-    - type: aws-sqs-queue
+    - type: aws-sqs
       metadata:
-        queueURL: https://sqs.us-east-1.amazonaws.com/1234/my-queue
-        awsRegion: us-east-1
+        queueURL: https://sqs.us-east-1.amazonaws.com/1234567890/my-queue
+        queueLength: "5"                           #For every 5 messages in the queue, KEDA will launch 1 job (pod).
+
 
 ```
+2**************************
 Logging:
 Use structured logs, ideally in JSON, for parsing in tools like Fluent Bit → Splunk  / CloudWatch.
 | Stage                       | Log Example / Message                                     |
