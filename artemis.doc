@@ -2,3 +2,15 @@ Overview:
 KEDA (Kubernetes-based Event Driven Autoscaler) enables Kubernetes workloads to autoscale based on the number of events or messages in external systems such as message queues, databases, or cloud services. Apache ActiveMQ Artemis is a high-performance messaging broker often used for enterprise-grade messaging scenarios.
 
 Integrating KEDA with Artemis allows our workloads to scale based on the depth of a queue/topic in Artemis, helping achieve efficient resource utilization and responsiveness.
+
+
+Description:
+> Artemis Broker is shown publishing messages to a queue.
+
+> A KEDA ScaledObject queries Artemis using a trigger authentication (e.g., a secret with Artemis credentials).
+
+> Based on the queue length or message count, KEDA decides whether to scale up or down.
+
+> Pods consume messages from Artemis as they scale out.
+
+This image shows the flow from message generation to autoscaling action and message consumption.
