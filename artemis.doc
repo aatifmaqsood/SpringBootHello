@@ -14,3 +14,19 @@ Description:
 > Pods consume messages from Artemis as they scale out.
 
 This image shows the flow from message generation to autoscaling action and message consumption.
+
+Why Use KEDA Artemis Scaler?
+| Benefit                  | Description                                                      |
+| ------------------------ | ---------------------------------------------------------------- |
+| **Event-driven scaling** | Autoscale consumers based on queue depth rather than CPU/memory. |
+| **Cost-effective**       | Scale to zero when idle, saving resources.                       |
+| **Responsive**           | Scales up quickly under load, down during inactivity.            |
+| **Decoupled design**     | Keeps messaging logic separate from resource management.         |
+
+When to Use:
+
+> Message queues feed heavy workloads.
+
+> Low latency processing matters.
+
+> You want consumer pods to scale dynamically with Artemis queue size.
