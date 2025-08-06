@@ -1,0 +1,53 @@
+Resource Shredder Self-Service Model Design
+Summary
+This design document outlines the approach to transform the current resource shredder pipeline into a self-service model for production, enabling application owners to independently analyze and optimize their resource utilization through three user experience options: Custom React App, Cartographer Integration, and Power BI.
+Current State Analysis
+  a) Existing Pipeline Components
+  b) Jenkins-based automation with PIKE-DevOps library
+  c) Resource analysis using kad-platform commands
+  d) GitOps integration for pull request generation
+  e) Datadog integration for metrics collection
+  f) Multi-environment support (dev, qa, prod)
+Current Limitations
+  a) Manual execution requires DevOps intervention
+  b) Limited visibility for application owners
+  c) No self-service capabilities
+  d) Production restrictions due to automation concerns
+Proposed Self-Service Architecture
+1. Custom React App Approach
+Architecture Components:
+  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   React Frontend│    │   API Gateway   │    │   Backend API   │
+│                 │◄──►│   (Kong/AWS)    │◄──►│   (Node.js/Go)  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                │                       │
+                                ▼                       ▼
+                       ┌─────────────────┐    ┌─────────────────┐
+                       │   Auth Service  │    │   Resource      │
+                       │   (OAuth/SAML)  │    │   Analyzer      │
+                       └─────────────────┘    └─────────────────┘
+                                                       │
+                                                       ▼
+                                              ┌─────────────────┐
+                                              │   Datadog API   │
+                                              │   GitOps API    │
+                                              │   Kubernetes    │
+                                              └─────────────────┘
+
+Implementation Plan
+  # Frontend Components
+components:
+  - ResourceDashboard
+  - OptimizationRecommendations
+  - EnvironmentSelector
+  - ApprovalWorkflow
+  - HistoricalTrends
+  - ResourceComparison
+
+# Backend Services
+services:
+  - ResourceAnalyzerService
+  - GitOpsService
+  - DatadogIntegrationService
+  - AuthService
+  - NotificationService
