@@ -30,8 +30,7 @@ Architecture Components:
                                                        ▼
                                               ┌─────────────────┐
                                               │   Datadog API   │
-                                              │   GitOps API    │
-                                              │   Kubernetes    │
+                                         
                                               └─────────────────┘
 
 Implementation Plan
