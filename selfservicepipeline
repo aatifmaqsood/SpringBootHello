@@ -1,0 +1,134 @@
+@Library ('fidelity-pipeline-library@release/0')
+// Load PIKE-Devops Jenkins Library
+library "pike-devops@${scm.branches[0].name.replace('refs/heads/', '')}"
+// Terminate job early if this is simply a heartbeat invocation.
+if (isHeartbeat()) { return }
+// Initialize an empty list to store project metadata
+def projectsMetadata = []
+// Define parameters for the pipeline
+params_list = [
+    string (name: 'projectNames', defaultValue: '', description: 'Short name list of your project(s) which' +
+        'is comma separated. Example: pri750d0-api, Samp1-app, samp2-web', trim: true),
+    choice(choices: ['dev', 'qa'], name: 'env', description: 'Environment to run the pipeline on'),
+    string (name: 'days', defaultValue: '30', description: 'Number of days worth of historical data'),
+    string (name: 'cpuThreshold', defaultValue: '95', description: 'This is % requested CPU threshold flag'),
+    booleanParam(defaultValue: false, description: 'This will be the booleanParam(defaultValue: false, description:
+    trim: true),
+    this to do a dry run of the pipeline ' +
+    '(used just to resist the ECC/ALM cleanup job)', name: 'heartbeat'),
+]
+// Define the pipeline structure
+// Define the pipeline structure
+pipeline {
+// Specify the agent to run the pipeline, using Kubernetes with a predefined container
+agent {
+    kubernetes {
+        defaultContainer 'pike-ops'
+        yaml pikeBuildpack()
+    }
+// Pipeline options, including secrets from Vault
+options {
+// Declare Pipeline-level Secrets
+    withVault(pikePlatformSecrets())
+}
+//Define GitHub credentials
+environment {
+    GITHUB = credentials ('RO-GITHUB-USER')
+    CONFLUENCE_URL = "$(params.env == 'prod' ? 'https://confluence.fmr.com/x/xAkpVw' : 'https://confluence.fmr.com/x/urE6W')"
+}
+stages {
+    // Setup stage: Initialize environment variables and pipeline parameters
+    stage ("Setup") {
+        steps {
+            script {
+                // Record the current stage name
+                last_started = env. STAGE_NAME
+                // Set pipeline parameters
+                properties ([parameters (params_list) ])
+                // Set up environment variables for the pipeline
+                env. PIKE_PROJECT_GIT_OPS_DIR = "workspace/app_projects"
+                env. PIKE_PROJECT_GIT_REF = "develop"
+                env. PIKE_PROJECT_GIT_REF_NEW = "${params.gitBranchName}"
+                env. PROJECT_NAMES = "${params.projectNames}"
+                env. DATADOG_API_KEY = "${env.DD_API_KEY}"
+                env. DATADOG_APPLICATION_KEY = "${env.DD_APP_KEY}"
+                //git config 
+                gitConfigUser()
+            }
+        }
+    }
+     // This stage sets up the GIT environment and checks out the Platform GitOps repository•
+    stage ("Checkout Platform GitOps") {
+        steps {
+            script {
+                last_started = env. STAGE_NAME
+                // Checkout the Platform GitOps repository
+                gitCheckoutPlatformGitOpsRepo()
+            }
+        }
+    }
+   
+    // Get Projects metadata stage: Retrieve metadata for the projects specified in the projectNames parameter
+    // This stage retrieves metadata for the projects specified in the projectNames parameter.
+    // It uses the get-projects-metadata command from the kad-platform.
+    // The metadata is stored in the projectsMetadata var for use in later stages
+    stage ("Get Projects metadata") {
+        steps {
+            script {
+                last_started = env. STAGE_NAME
+                // Define the path to the platform Pipfile
+                def platformPath = "./${env.KAD_PLATFORM_GIT_OPS_DIR}/Pipfile"
+                // Retrieve project names from pipeline parameters
+                def projectNames = "${params.projectNames}"
+                // Execute a shell command to get project metadata and parse the JSON response
+                def jsonString = sh(
+                    script: """
+                    /bin/kad-platform get-projects-metadata \
+                    --project-path ${platformPath} \
+                    --project-names ${projectNames} \
+                    --cluster-runtimes ${params.env} \
+                    """,
+                    returnStdout: true
+                ) . trim()
+                // Parse the JSON string into a Groovy object
+                projectsMetadata = new groovy.json.JsonSlurper().parseText(jsonString)
+                // Check if metadata retrieval was successful
+                if (projectsMetadata.isEmpty()) {
+                    logAndRaiseError ("Cannot find project.")
+                }
+            }
+        }
+    }
+    // This stage iterates over each project in projectsMetadata and checks out the corresponding GitOps repository for the project.
+    // It then uses the resource-shredder-cpu command from the kad-platform to get the desired CPU resources for each project.
+    // It then submits a pull request to the corresponding GitOps repository with the desired CPU resources.
+    stage("Set Desired CPU & Submit a Pull Request") {
+        steps {
+            script {
+                last_started = env. STAGE_NAME,
+                // Iterate over each project and get the desired CPU resources
+                def projects = projectsMetadata
+                // Iterate over each project and get the desired CPU resources
+                for (project in projects) {
+                    // Set the Git repository for the current project
+                    def gitops_repo = project.gitops_repo
+                    // Define the path to the project within the GitOps directory
+                    def projectPath = "$(PIKE_PROJECT_GIT_OPS_DIR)/${project.name}"
+                    // Checkout the GitOps repository for the app
+                    checkoutAppGitOpsRepo(pikeProjectGitOpsDir: projectPath, tree: false)
+                    env.PIKE_PROJECT_GIT_OPS_DIR = project.gitops_repo
+                    int days = env.DAYS as Integer
+                    int cpuThreshold = env.cpuThreshold as Integer
+                    // Define the target environments
+                    int envMap = ['dev': ['dev', 'dit'], 'qa': ['qa', 'uat', 'xq1', 'xq2'], 'prod': ['prod']]
+                    def targetEnvironments = envMap[params.env]
+                    // Iterate over each target environment
+                    for (envName in targetEnvironments) {
+                        // Execute a shell command to calculate CPU resources and store the JSON response
+                        def output = resourceShredderSubmitPR(project: project, envName: envName, days: days, cpuThreshold: cpuThreshold, repo: repo)
+                    }
+                }
+            }
+        }
+    }
+}

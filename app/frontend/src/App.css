@@ -1,0 +1,59 @@
+.App {
+  text-align: left;
+  min-height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Table styling */
+.MuiTableContainer-root {
+  max-height: 600px;
+}
+
+/* Card styling */
+.MuiCard-root {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Button spacing */
+.MuiButton-root {
+  margin: 4px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .MuiGrid-container {
+    margin: 0 !important;
+  }
+  
+  .MuiCardContent-root {
+    padding: 16px !important;
+  }
+}
