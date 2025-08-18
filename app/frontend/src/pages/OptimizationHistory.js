@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Container,
+  Typography,
   Card,
   CardContent,
-  Typography,
   Table,
   TableBody,
   TableCell,
@@ -14,37 +15,35 @@ import {
   Alert,
   CircularProgress,
   Chip,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
   Grid,
-  MenuItem,
-  Select,
   FormControl,
   InputLabel,
+  Select,
+  MenuItem,
+  TextField,
 } from '@mui/material';
 import {
-  History as HistoryIcon,
-  Edit as EditIcon,
-  Link as LinkIcon,
-} from '@mui/icons-material';
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts';
 import axios from 'axios';
 
-const OptimizationHistory = () => {
-  const [data, setData] = useState([]);
+const PRStatusAnalysis = () => {
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedRecord, setSelectedRecord] = useState(null);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [updating, setUpdating] = useState(false);
-  const [editData, setEditData] = useState({
-    status: '',
-    pr_url: '',
-    notes: ''
-  });
+  const [filterProject, setFilterProject] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterEnv, setFilterEnv] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -53,113 +52,84 @@ const OptimizationHistory = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/optimization-history');
+      const response = await axios.get('/api/resource-utilization');
       setData(response.data);
     } catch (err) {
-      setError('Failed to fetch optimization history');
+      setError('Failed to fetch PR status data');
       console.error('Data fetch error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEdit = (record) => {
-    setSelectedRecord(record);
-    setEditData({
-      status: record.status,
-      pr_url: record.pr_url || '',
-      notes: record.notes || ''
-    });
-    setEditDialogOpen(true);
-  };
-
-  const updateRecord = async () => {
-    if (!selectedRecord) return;
-
-    try {
-      setUpdating(true);
-      
-      await axios.put(`/api/optimization-history/${selectedRecord.id}`, {
-        status: editData.status,
-        pr_url: editData.pr_url
-      });
-      
-      // Update local data
-      setData(data.map(record => 
-        record.id === selectedRecord.id 
-          ? { ...record, status: editData.status, pr_url: editData.pr_url, notes: editData.notes }
-          : record
-      ));
-      
-      // Close dialog
-      setEditDialogOpen(false);
-      setSelectedRecord(null);
-      
-      // Show success message
-      setError(null);
-      
-    } catch (err) {
-      setError('Failed to update optimization record');
-      console.error('Update error:', err);
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed':
-        return 'success';
-      case 'pending':
-        return 'warning';
-      case 'failed':
-        return 'error';
-      case 'in_progress':
-        return 'info';
-      default:
-        return 'default';
-    }
-  };
-
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'completed':
-        return 'Completed';
-      case 'pending':
-        return 'Pending';
-      case 'failed':
-        return 'Failed';
-      case 'in_progress':
-        return 'In Progress';
-      default:
-        return status;
-    }
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString();
-  };
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
+      <Container>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
+        </Box>
+      </Container>
     );
   }
 
   if (error) {
-    return <Alert severity="error">{error}</Alert>;
+    return (
+      <Container>
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {error}
+        </Alert>
+      </Container>
+    );
   }
 
-  return (
-    <div>
-      <Typography variant="h4" gutterBottom>
-        Optimization History
-      </Typography>
+  // Filter data based on selected filters
+  const filteredData = data.filter(item => {
+    if (filterProject && item.project !== filterProject) return false;
+    if (filterStatus && item.pr_status !== filterStatus) return false;
+    if (filterEnv && item.env !== filterEnv) return false;
+    return true;
+  });
 
-      <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
-        Track all resource optimization actions and their current status.
+  // Prepare chart data
+  const statusData = data.reduce((acc, item) => {
+    acc[item.pr_status] = (acc[item.pr_status] || 0) + 1;
+    return acc;
+  }, {});
+
+  const statusChartData = Object.entries(statusData).map(([status, count]) => ({
+    name: status,
+    count: count,
+  }));
+
+  const projectStatusData = data.reduce((acc, item) => {
+    if (!acc[item.project]) {
+      acc[item.project] = { Open: 0, Merged: 0, Closed: 0 };
+    }
+    acc[item.project][item.pr_status] = (acc[item.project][item.pr_status] || 0) + 1;
+    return acc;
+  }, {});
+
+  const projectChartData = Object.entries(projectStatusData).map(([project, statuses]) => ({
+    name: project,
+    ...statuses
+  }));
+
+  const pieData = Object.entries(statusData).map(([status, count]) => ({
+    name: status,
+    value: count,
+  }));
+
+  // Get unique values for filters
+  const projects = [...new Set(data.map(item => item.project))];
+  const statuses = [...new Set(data.map(item => item.pr_status))];
+  const environments = [...new Set(data.map(item => item.env))];
+
+  return (
+    <Container maxWidth="xl">
+      <Typography variant="h4" gutterBottom>
+        PR Status Analysis
       </Typography>
 
       {/* Summary Cards */}
@@ -168,7 +138,7 @@ const OptimizationHistory = () => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Total Optimizations
+                Total PRs
               </Typography>
               <Typography variant="h4">
                 {data.length}
@@ -180,22 +150,10 @@ const OptimizationHistory = () => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Completed
-              </Typography>
-              <Typography variant="h4" color="success.main">
-                {data.filter(record => record.status === 'completed').length}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Pending
+                Open PRs
               </Typography>
               <Typography variant="h4" color="warning.main">
-                {data.filter(record => record.status === 'pending').length}
+                {data.filter(item => item.pr_status === 'Open').length}
               </Typography>
             </CardContent>
           </Card>
@@ -204,193 +162,211 @@ const OptimizationHistory = () => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Total CPU Saved
+                Merged PRs
               </Typography>
-              <Typography variant="h4" color="info.main">
-                {data.reduce((sum, record) => sum + (record.old_req_cpu - record.new_req_cpu), 0).toFixed(0)}
+              <Typography variant="h4" color="success.main">
+                {data.filter(item => item.pr_status === 'Merged').length}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Typography color="textSecondary" gutterBottom>
+                Projects
+              </Typography>
+              <Typography variant="h4">
+                {projects.length}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* History Table */}
-      <Card>
+      {/* Filters */}
+      <Card sx={{ mb: 4 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Optimization Records ({data.length} records)
+            Filters
           </Typography>
-          
-          {data.length === 0 ? (
-            <Box textAlign="center" py={4}>
-              <HistoryIcon color="disabled" sx={{ fontSize: 64, mb: 2 }} />
-              <Typography variant="h6" color="textSecondary">
-                No optimization history found
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Start optimizing resources to see history here.
-              </Typography>
-            </Box>
-          ) : (
-            <TableContainer component={Paper}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>App Name</TableCell>
-                    <TableCell>Environment</TableCell>
-                    <TableCell>CPU Change</TableCell>
-                    <TableCell>Savings</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Date</TableCell>
-                    <TableCell>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {data.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="subtitle2">
-                            {record.app_uniq}
-                          </Typography>
-                          <Typography variant="caption" color="textSecondary">
-                            {record.app_id}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={record.env.toUpperCase()} 
-                          size="small" 
-                          color="primary" 
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {record.old_req_cpu} → {record.new_req_cpu}
-                        </Typography>
-                        <Typography variant="caption" color="textSecondary">
-                          {((record.old_req_cpu - record.new_req_cpu) / record.old_req_cpu * 100).toFixed(1)}% reduction
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="success.main">
-                          {record.old_req_cpu - record.new_req_cpu}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={getStatusLabel(record.status)}
-                          color={getStatusColor(record.status)}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {formatDate(record.optimization_date)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<EditIcon />}
-                          onClick={() => handleEdit(record)}
-                        >
-                          Edit
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth>
+                <InputLabel>Project</InputLabel>
+                <Select
+                  value={filterProject}
+                  label="Project"
+                  onChange={(e) => setFilterProject(e.target.value)}
+                >
+                  <MenuItem value="">All Projects</MenuItem>
+                  {projects.map(project => (
+                    <MenuItem key={project} value={project}>{project}</MenuItem>
                   ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={filterStatus}
+                  label="Status"
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                >
+                  <MenuItem value="">All Statuses</MenuItem>
+                  {statuses.map(status => (
+                    <MenuItem key={status} value={status}>{status}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <FormControl fullWidth>
+                <InputLabel>Environment</InputLabel>
+                <Select
+                  value={filterEnv}
+                  label="Environment"
+                  onChange={(e) => setFilterEnv(e.target.value)}
+                >
+                  <MenuItem value="">All Environments</MenuItem>
+                  {environments.map(env => (
+                    <MenuItem key={env} value={env}>{env}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
-      <Dialog 
-        open={editDialogOpen} 
-        onClose={() => setEditDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          Update Optimization Record
-        </DialogTitle>
-        <DialogContent>
-          {selectedRecord && (
-            <Box>
-              <Typography variant="body1" gutterBottom>
-                <strong>Application:</strong> {selectedRecord.app_uniq} ({selectedRecord.app_id})
+      {/* Charts */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                PR Status Distribution
               </Typography>
-              <Typography variant="body1" gutterBottom>
-                <strong>Environment:</strong> {selectedRecord.env.toUpperCase()}
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={statusChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="count" fill="#8884d8" name="Count" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                PR Status by Project
               </Typography>
-              <Typography variant="body1" gutterBottom>
-                <strong>CPU Change:</strong> {selectedRecord.old_req_cpu} → {selectedRecord.new_req_cpu}
-              </Typography>
-              
-              <Grid container spacing={2} sx={{ mt: 2 }}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    select
-                    label="Status"
-                    value={editData.status}
-                    onChange={(e) => setEditData({ ...editData, status: e.target.value })}
-                  >
-                    <MenuItem value="pending">Pending</MenuItem>
-                    <MenuItem value="in_progress">In Progress</MenuItem>
-                    <MenuItem value="completed">Completed</MenuItem>
-                    <MenuItem value="failed">Failed</MenuItem>
-                  </TextField>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    fullWidth
-                    label="PR URL"
-                    value={editData.pr_url}
-                    onChange={(e) => setEditData({ ...editData, pr_url: e.target.value })}
-                    placeholder="https://github.com/..."
-                    InputProps={{
-                      startAdornment: <LinkIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={3}
-                    label="Notes"
-                    value={editData.notes}
-                    onChange={(e) => setEditData({ ...editData, notes: e.target.value })}
-                    placeholder="Add any additional notes..."
-                  />
-                </Grid>
-              </Grid>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditDialogOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={updateRecord}
-            variant="contained"
-            disabled={updating}
-            startIcon={updating ? <CircularProgress size={20} /> : <EditIcon />}
-          >
-            {updating ? 'Updating...' : 'Update Record'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={projectChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="Open" fill="#ff6b6b" name="Open" />
+                  <Bar dataKey="Merged" fill="#51cf66" name="Merged" />
+                  <Bar dataKey="Closed" fill="#868e96" name="Closed" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* PR Status Table */}
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom>
+            PR Status Details ({filteredData.length} records)
+          </Typography>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell><strong>Application</strong></TableCell>
+                  <TableCell><strong>Project</strong></TableCell>
+                  <TableCell><strong>Environment</strong></TableCell>
+                  <TableCell><strong>PR Status</strong></TableCell>
+                  <TableCell><strong>PR URL</strong></TableCell>
+                  <TableCell><strong>CPU Utilization</strong></TableCell>
+                  <TableCell><strong>Current CPU</strong></TableCell>
+                  <TableCell><strong>Recommended CPU</strong></TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filteredData.map((item, index) => (
+                  <TableRow key={index}>
+                    <TableCell>
+                      <Box>
+                        <Typography variant="subtitle2">
+                          {item.app_name}
+                        </Typography>
+                        <Typography variant="caption" color="textSecondary">
+                          {item.app_uniq}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>{item.project}</TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={item.env} 
+                        size="small" 
+                        color="primary" 
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={item.pr_status} 
+                        color={item.pr_status === 'Open' ? 'warning' : 
+                               item.pr_status === 'Merged' ? 'success' : 'default'}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {item.pr_url ? (
+                        <a href={item.pr_url} target="_blank" rel="noopener noreferrer">
+                          View PR
+                        </a>
+                      ) : (
+                        <Typography variant="body2" color="textSecondary">
+                          No URL
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={`${item.max_cpu_utilz_percent}% CPU`} 
+                        color={(item.max_cpu_utilz_percent / 100.0) * item.req_cpu < (item.req_cpu * 0.5) ? 'warning' : 'success'} 
+                        size="small" 
+                      />
+                    </TableCell>
+                    <TableCell>{item.req_cpu}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="success.main">
+                        {item.new_req_cpu}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </CardContent>
+      </Card>
+    </Container>
   );
 };
 
-export default OptimizationHistory;
+export default PRStatusAnalysis;
