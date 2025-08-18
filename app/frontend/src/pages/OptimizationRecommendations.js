@@ -55,11 +55,15 @@ const OptimizationRecommendations = () => {
       // First, always fetch resource utilization data
       const utilizationRes = await axios.get('/api/resource-utilization');
       
+      // Debug: Log the raw data to see what we're getting
+      console.log('Raw utilization data sample:', utilizationRes.data.slice(0, 3));
+      
       // Try to fetch optimization recommendations, but don't fail if it doesn't work
       let recommendationsData = [];
       try {
         const recommendationsRes = await axios.get('/api/optimization-recommendations');
         recommendationsData = recommendationsRes.data;
+        console.log('Backend recommendations data:', recommendationsData);
       } catch (recError) {
         console.warn('Optimization recommendations endpoint failed, using resource utilization data:', recError.message);
         // If optimization recommendations fail, process the resource utilization data
@@ -83,12 +87,12 @@ const OptimizationRecommendations = () => {
           projectGroups[app.project].total_cpu_utilization += parseFloat(app.max_cpu_utilz_percent || 0);
           
           // Check if app is overprovisioned (using < 50% of requested CPU)
-          const actualCpuUsed = (parseFloat(app.max_cpu_utilz_percent || 0) / 100.0) * app.req_cpu;
-          const thresholdCpu = app.req_cpu * 0.5;
+          const actualCpuUsed = (parseFloat(app.max_cpu_utilz_percent || 0) / 100.0) * parseInt(app.req_cpu || 0);
+          const thresholdCpu = parseInt(app.req_cpu || 0) * 0.5;
           
           if (actualCpuUsed < thresholdCpu) {
             projectGroups[app.project].overprovisioned_apps++;
-            projectGroups[app.project].potential_cpu_savings += (app.req_cpu - app.new_req_cpu);
+            projectGroups[app.project].potential_cpu_savings += (parseInt(app.req_cpu || 0) - parseInt(app.new_req_cpu || 0));
           } else {
             projectGroups[app.project].properly_provisioned_apps++;
           }
@@ -105,6 +109,11 @@ const OptimizationRecommendations = () => {
         recommendations: recommendationsData,
         utilization: utilizationRes.data
       });
+      
+      // Debug logging
+      console.log('Processed recommendations data:', recommendationsData);
+      console.log('Total overprovisioned apps:', recommendationsData.reduce((sum, rec) => sum + parseInt(rec.overprovisioned_apps || 0), 0));
+      console.log('Total CPU savings:', recommendationsData.reduce((sum, rec) => sum + parseInt(rec.potential_cpu_savings || 0), 0));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -160,22 +169,25 @@ const OptimizationRecommendations = () => {
   // Prepare chart data
   const chartData = data.recommendations.map(rec => ({
     name: rec.project,
-    overprovisioned: rec.overprovisioned_apps || 0,
-    properly_provisioned: rec.properly_provisioned_apps || 0,
+    overprovisioned: parseInt(rec.overprovisioned_apps || 0),
+    properly_provisioned: parseInt(rec.properly_provisioned_apps || 0),
     avg_cpu: parseFloat(rec.avg_cpu_utilization || 0).toFixed(1),
-    potential_savings: rec.potential_cpu_savings || 0
+    potential_savings: parseInt(rec.potential_cpu_savings || 0)
   }));
+
+  const totalOverprovisioned = data.recommendations.reduce((sum, rec) => sum + parseInt(rec.overprovisioned_apps || 0), 0);
+  const totalProperlyProvisioned = data.recommendations.reduce((sum, rec) => sum + parseInt(rec.properly_provisioned_apps || 0), 0);
 
   const pieData = [
     {
       name: 'Overprovisioned',
-      value: data.recommendations.reduce((sum, rec) => sum + (rec.overprovisioned_apps || 0), 0)
+      value: totalOverprovisioned
     },
     {
       name: 'Properly Provisioned',
-      value: data.recommendations.reduce((sum, rec) => sum + (rec.properly_provisioned_apps || 0), 0)
+      value: totalProperlyProvisioned
     }
-  ];
+  ].filter(item => item.value > 0); // Only show segments with values > 0
 
   return (
     <Container maxWidth="xl">
@@ -275,23 +287,31 @@ const OptimizationRecommendations = () => {
                 Overall Provisioning Distribution
               </Typography>
               <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
+                {pieData.length > 0 ? (
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                ) : (
+                  <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+                    <Typography variant="body2" color="textSecondary">
+                      No data available for pie chart
+                    </Typography>
+                  </Box>
+                )}
               </ResponsiveContainer>
             </CardContent>
           </Card>
