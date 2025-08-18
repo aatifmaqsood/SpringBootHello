@@ -19,6 +19,18 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Initialize database service
 const dbService = new DatabaseService();
 
+// Debug: Show environment variables on startup
+console.log('=== SERVER STARTUP DEBUG ===');
+console.log('Environment variables loaded:');
+console.log('DB_USER:', process.env.DB_USER);
+console.log('DB_HOST:', process.env.DB_HOST);
+console.log('DB_NAME:', process.env.DB_NAME);
+console.log('DB_PORT:', process.env.DB_PORT);
+console.log('DB_PASSWORD length:', process.env.DB_PASSWORD ? process.env.DB_PASSWORD.length : 'undefined');
+console.log('DB_SCHEMA:', process.env.DB_SCHEMA);
+console.log('DB_TABLE:', process.env.DB_TABLE);
+console.log('================================');
+
 // Initialize database connection on startup
 dbService.initDatabase().catch(console.error);
 
@@ -209,8 +221,9 @@ app.get('/api/stats/summary', async (req, res) => {
             total_projects: projectStats.length,
             environments: envStats.map(env => env.environment),
             projects: projectStats.map(proj => proj.project),
-            open_prs: projectStats.reduce((sum, proj) => sum + parseInt(proj.open_prs), 0),
-            merged_prs: projectStats.reduce((sum, proj) => sum + parseInt(proj.merged_prs), 0),
+            overprovisioned_count: utilizationData.filter(app => app.max_cpu_utilz_percent > 80).length,
+            avg_cpu_utilization: utilizationData.reduce((sum, app) => sum + (app.max_cpu_utilz_percent || 0), 0) / utilizationData.length,
+            total_cpu_savings: utilizationData.reduce((sum, app) => sum + (app.req_cpu - app.new_req_cpu), 0),
             project_breakdown: projectStats
         };
 
