@@ -221,11 +221,19 @@ app.get('/api/stats/summary', async (req, res) => {
             total_projects: projectStats.length,
             environments: envStats.map(env => env.environment),
             projects: projectStats.map(proj => proj.project),
-            overprovisioned_count: utilizationData.filter(app => (app.max_cpu_utilz_percent / 100.0) * app.req_cpu < (app.req_cpu * 0.5)).length,
-            avg_cpu_utilization: utilizationData.reduce((sum, app) => sum + (app.max_cpu_utilz_percent || 0), 0) / utilizationData.length,
+            overprovisioned_count: utilizationData.filter(app => {
+                const maxCpuPercent = parseFloat(app.max_cpu_utilz_percent || 0);
+                const reqCpu = parseInt(app.req_cpu || 0);
+                return (maxCpuPercent / 100.0) * reqCpu < (reqCpu * 0.5);
+            }).length,
+            avg_cpu_utilization: utilizationData.length > 0 ? 
+                utilizationData.reduce((sum, app) => sum + parseFloat(app.max_cpu_utilz_percent || 0), 0) / utilizationData.length : 0,
             total_cpu_savings: utilizationData.reduce((sum, app) => {
-                if ((app.max_cpu_utilz_percent / 100.0) * app.req_cpu < (app.req_cpu * 0.5)) {
-                    return sum + (app.req_cpu - app.new_req_cpu);
+                const maxCpuPercent = parseFloat(app.max_cpu_utilz_percent || 0);
+                const reqCpu = parseInt(app.req_cpu || 0);
+                const newReqCpu = parseInt(app.new_req_cpu || 0);
+                if ((maxCpuPercent / 100.0) * reqCpu < (reqCpu * 0.5)) {
+                    return sum + (reqCpu - newReqCpu);
                 }
                 return sum;
             }, 0),
