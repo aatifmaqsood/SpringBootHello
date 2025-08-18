@@ -29,7 +29,6 @@ import axios from 'axios';
 const Dashboard = () => {
   const [data, setData] = useState({
     resourceUtilization: [],
-    optimizationHistory: [],
     summary: {}
   });
   const [loading, setLoading] = useState(true);
@@ -42,15 +41,13 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [utilizationRes, historyRes, summaryRes] = await Promise.all([
+      const [utilizationRes, summaryRes] = await Promise.all([
         axios.get('/api/resource-utilization'),
-        axios.get('/api/optimization-history'),
         axios.get('/api/stats/summary')
       ]);
 
       setData({
         resourceUtilization: utilizationRes.data,
-        optimizationHistory: historyRes.data,
         summary: summaryRes.data
       });
     } catch (err) {
