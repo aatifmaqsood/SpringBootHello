@@ -8,12 +8,19 @@ class DatabaseService {
         this.tableName = process.env.DB_TABLE || 'nonprod_all_data_all_v1';
         
         this.pool = new Pool({
-            user: process.env.DB_USER || 'postgres',
-            host: process.env.DB_HOST || 'localhost',
+            user: process.env.DB_USER || 'krs_app_rw',
+            host: process.env.DB_HOST || 'krs-aurora-cluster-identifier.cluster-ro-chh1bxuyaidj.us-east-1.rds.amazonaws.com',
             database: process.env.DB_NAME || 'krs',
             password: process.env.DB_PASSWORD || 'password',
             port: process.env.DB_PORT || 5432,
-            options: `-c search_path=public,${this.schema}`
+            options: `-c search_path=public,${this.schema}`,
+            // AWS RDS specific configurations
+            ssl: {
+                rejectUnauthorized: false // For development - set to true in production
+            },
+            connectionTimeoutMillis: 10000,
+            idleTimeoutMillis: 30000,
+            max: 20
         });
         
         this.dumpDir = path.join(__dirname, '../dumps');
@@ -49,6 +56,26 @@ class DatabaseService {
                 hint: error.hint,
                 position: error.position
             });
+            
+            // AWS RDS specific error handling
+            if (error.code === '28000') {
+                console.error('Authentication failed. Please check:');
+                console.error('1. Username and password are correct');
+                console.error('2. User has access to the database');
+                console.error('3. Network/security group allows your connection');
+                console.error('4. SSL configuration is correct');
+            } else if (error.code === 'ENOTFOUND') {
+                console.error('Host not found. Please check:');
+                console.error('1. Hostname is correct');
+                console.error('2. DNS resolution is working');
+                console.error('3. VPC/subnet configuration');
+            } else if (error.code === 'ECONNREFUSED') {
+                console.error('Connection refused. Please check:');
+                console.error('1. Port is correct (5432)');
+                console.error('2. Security group allows inbound connections');
+                console.error('3. Database is running and accessible');
+            }
+            
             throw error;
         }
     }
