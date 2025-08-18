@@ -78,13 +78,6 @@ const ResourceUtilization = () => {
     setFilteredData(filtered);
   };
 
-  const getUtilizationColor = (utilization) => {
-    const value = parseFloat(utilization.replace(' API', ''));
-    if (value > 100) return 'error';
-    if (value > 80) return 'warning';
-    return 'success';
-  };
-
   const getStatusColor = (status) => {
     switch (status) {
       case 'Merged':
@@ -229,9 +222,9 @@ const ResourceUtilization = () => {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        label={app.max_cpu_uti}
-                        color={getUtilizationColor(app.max_cpu_uti)}
+                      <Chip 
+                        label={`${app.max_cpu_utilz_percent}%`}
+                        color={(app.max_cpu_utilz_percent / 100.0) * app.req_cpu < (app.req_cpu * 0.5) ? 'warning' : 'success'}
                         size="small"
                       />
                     </TableCell>
