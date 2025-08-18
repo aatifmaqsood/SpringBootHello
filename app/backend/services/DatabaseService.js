@@ -4,12 +4,16 @@ const path = require('path');
 
 class DatabaseService {
     constructor() {
+        this.schema = process.env.DB_SCHEMA || 'krs';
+        this.tableName = process.env.DB_TABLE || 'nonprod_all_data_all_v1';
+        
         this.pool = new Pool({
             user: process.env.DB_USER || 'postgres',
             host: process.env.DB_HOST || 'localhost',
             database: process.env.DB_NAME || 'resource_utilization',
             password: process.env.DB_PASSWORD || 'password',
             port: process.env.DB_PORT || 5432,
+            options: `-c search_path=${this.schema},public`
         });
         
         this.dumpDir = path.join(__dirname, '../dumps');
@@ -24,100 +28,28 @@ class DatabaseService {
 
     async initDatabase() {
         try {
-            await this.createTables();
-            await this.insertSampleData();
-            console.log('Database initialized successfully');
+            // Verify connection to existing table
+            const result = await this.pool.query(`SELECT COUNT(*) FROM ${this.schema}.${this.tableName}`);
+            console.log(`Connected to existing database successfully: ${this.schema}.${this.tableName}`);
+            console.log(`Total rows in table: ${result.rows[0].count}`);
         } catch (error) {
-            console.error('Database initialization error:', error);
+            console.error('Database connection error:', error);
             throw error;
         }
     }
 
-    async createTables() {
-        const createResourceUtilizationTable = `
-            CREATE TABLE IF NOT EXISTS resource_utilization (
-                id SERIAL PRIMARY KEY,
-                app_uniq VARCHAR(255) NOT NULL,
-                project VARCHAR(255) NOT NULL,
-                pr_url TEXT,
-                pr_status VARCHAR(50) DEFAULT 'Open',
-                app_name VARCHAR(255) NOT NULL,
-                app_id VARCHAR(50) NOT NULL,
-                env VARCHAR(50) NOT NULL,
-                max_cpu DECIMAL(10,2) NOT NULL,
-                avg_cpu DECIMAL(10,2) NOT NULL,
-                req_cpu DECIMAL(10,2) NOT NULL,
-                new_req_cpu DECIMAL(10,2) NOT NULL,
-                max_cpu_uti VARCHAR(50) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `;
-
-        const createOptimizationHistoryTable = `
-            CREATE TABLE IF NOT EXISTS optimization_history (
-                id SERIAL PRIMARY KEY,
-                app_uniq VARCHAR(255) NOT NULL,
-                app_id VARCHAR(50) NOT NULL,
-                env VARCHAR(50) NOT NULL,
-                old_req_cpu DECIMAL(10,2) NOT NULL,
-                new_req_cpu DECIMAL(10,2) NOT NULL,
-                optimization_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                status VARCHAR(50) DEFAULT 'pending',
-                pr_url TEXT,
-                notes TEXT
-            )
-        `;
-
-        try {
-            await this.pool.query(createResourceUtilizationTable);
-            await this.pool.query(createOptimizationHistoryTable);
-            console.log('Tables created successfully');
-        } catch (error) {
-            console.error('Error creating tables:', error);
-            throw error;
-        }
-    }
-
-    async insertSampleData() {
-        try {
-            // Check if data already exists
-            const result = await this.pool.query('SELECT COUNT(*) FROM resource_utilization');
-            if (parseInt(result.rows[0].count) > 0) {
-                console.log('Sample data already exists, skipping...');
-                return;
-            }
-
-            const sampleData = [
-                ['aaoesigcloud-dit', 'filiannaccop-api', 'https://github.com/Fidelity-R', 'Merged', 'aaoesigclouc', 'AP153454', 'dit', 481.24, 10.55, 512, 100, '93.99 API'],
-                ['acctbenasset-uat', 'nextgensp-api', 'https://github.com/Fidelity-R', 'Open', 'aaogateway', 'AP155472', 'uat', 281.44, 11.07, 250, 100, '54.97 API'],
-                ['acctbenasset-uat', 'faa-retail-api', 'https://github.com/Fidelity-R', 'Merged', 'acctbenasse', 'AP158019', 'uat', 536.47, 11.22, 500, 100, '104.78 API'],
-                ['aaoesigcloud-dit', 'filiannaccop-api', 'https://github.com/Fidelity-R', 'Open', 'aaoesigclouc', 'AP153455', 'dit', 245.67, 8.92, 300, 100, '81.89 API'],
-                ['acctbenasset-uat', 'nextgensp-api', 'https://github.com/Fidelity-R', 'Merged', 'aaogateway', 'AP155473', 'uat', 189.34, 7.45, 200, 100, '94.67 API']
-            ];
-
-            const insertQuery = `
-                INSERT INTO resource_utilization 
-                (app_uniq, project, pr_url, pr_status, app_name, app_id, env, max_cpu, avg_cpu, req_cpu, new_req_cpu, max_cpu_uti)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            `;
-
-            for (const data of sampleData) {
-                await this.pool.query(insertQuery, data);
-            }
-
-            console.log('Sample data inserted successfully');
-        } catch (error) {
-            console.error('Error inserting sample data:', error);
-            throw error;
-        }
-    }
-
-    // Resource utilization operations
+    // Resource utilization operations - Updated to use your actual table structure
     async getAllResourceUtilization() {
         try {
             const result = await this.pool.query(`
-                SELECT * FROM resource_utilization 
+                SELECT 
+                    app_uniq,
+                    project,
+                    pr_url,
+                    pr_status,
+                    branch_nm,
+                    created_at
+                FROM ${this.schema}.${this.tableName}
                 ORDER BY created_at DESC
             `);
             return result.rows;
@@ -128,37 +60,61 @@ class DatabaseService {
 
     async getResourceUtilizationByEnv(env) {
         try {
+            // Extract environment from app_uniq (e.g., 'uat', 'dit' from 'aaogateway-uat')
             const result = await this.pool.query(`
-                SELECT * FROM resource_utilization 
-                WHERE env = $1 
+                SELECT 
+                    app_uniq,
+                    project,
+                    pr_url,
+                    pr_status,
+                    branch_nm,
+                    created_at
+                FROM ${this.schema}.${this.tableName}
+                WHERE app_uniq LIKE $1
                 ORDER BY created_at DESC
-            `, [env]);
+            `, [`%${env}%`]);
             return result.rows;
         } catch (error) {
             throw new Error(`Failed to fetch resource utilization for env ${env}: ${error.message}`);
         }
     }
 
-    async getResourceUtilizationByAppId(appId) {
+    async getResourceUtilizationByProject(project) {
         try {
             const result = await this.pool.query(`
-                SELECT * FROM resource_utilization 
-                WHERE app_id = $1 
+                SELECT 
+                    app_uniq,
+                    project,
+                    pr_url,
+                    pr_status,
+                    branch_nm,
+                    created_at
+                FROM ${this.schema}.${this.tableName}
+                WHERE project = $1
                 ORDER BY created_at DESC
-            `, [appId]);
+            `, [project]);
             return result.rows;
         } catch (error) {
-            throw new Error(`Failed to fetch resource utilization for app ${appId}: ${error.message}`);
+            throw new Error(`Failed to fetch resource utilization for project ${project}: ${error.message}`);
         }
     }
 
     async getOverprovisionedApps(threshold = 80) {
         try {
+            // Since your table doesn't have CPU utilization data, 
+            // we'll focus on PR status and project analysis
             const result = await this.pool.query(`
-                SELECT * FROM resource_utilization 
-                WHERE CAST(REPLACE(max_cpu_uti, ' API', '') AS DECIMAL) > $1
-                ORDER BY CAST(REPLACE(max_cpu_uti, ' API', '') AS DECIMAL) DESC
-            `, [threshold]);
+                SELECT 
+                    app_uniq,
+                    project,
+                    pr_url,
+                    pr_status,
+                    branch_nm,
+                    created_at
+                FROM ${this.schema}.${this.tableName}
+                WHERE pr_status = 'Open'
+                ORDER BY created_at DESC
+            `);
             return result.rows;
         } catch (error) {
             throw new Error(`Failed to fetch overprovisioned apps: ${error.message}`);
@@ -167,21 +123,16 @@ class DatabaseService {
 
     async getOptimizationRecommendations() {
         try {
+            // Focus on projects with open PRs that might need attention
             const result = await this.pool.query(`
                 SELECT 
-                    app_uniq,
-                    app_name,
-                    app_id,
-                    env,
-                    max_cpu,
-                    avg_cpu,
-                    req_cpu,
-                    new_req_cpu,
-                    max_cpu_uti,
-                    ROUND((req_cpu - new_req_cpu) / req_cpu * 100, 2) as cpu_savings_percent
-                FROM resource_utilization 
-                WHERE req_cpu > new_req_cpu
-                ORDER BY cpu_savings_percent DESC
+                    project,
+                    COUNT(*) as open_prs,
+                    COUNT(CASE WHEN pr_status = 'Open' THEN 1 END) as pending_prs,
+                    COUNT(CASE WHEN pr_status = 'Merged' THEN 1 END) as merged_prs
+                FROM ${this.schema}.${this.tableName}
+                GROUP BY project
+                ORDER BY open_prs DESC
             `);
             return result.rows;
         } catch (error) {
@@ -189,7 +140,57 @@ class DatabaseService {
         }
     }
 
-    // Optimization history operations
+    // Get project statistics
+    async getProjectStats() {
+        try {
+            const result = await this.pool.query(`
+                SELECT 
+                    project,
+                    COUNT(*) as total_entries,
+                    COUNT(CASE WHEN pr_status = 'Open' THEN 1 END) as open_prs,
+                    COUNT(CASE WHEN pr_status = 'Merged' THEN 1 END) as merged_prs,
+                    COUNT(DISTINCT app_uniq) as unique_apps
+                FROM ${this.schema}.${this.tableName}
+                GROUP BY project
+                ORDER BY total_entries DESC
+            `);
+            return result.rows;
+        } catch (error) {
+            throw new Error(`Failed to fetch project stats: ${error.message}`);
+        }
+    }
+
+    // Get environment statistics
+    async getEnvironmentStats() {
+        try {
+            const result = await this.pool.query(`
+                SELECT 
+                    CASE 
+                        WHEN app_uniq LIKE '%uat%' THEN 'UAT'
+                        WHEN app_uniq LIKE '%dit%' THEN 'DIT'
+                        WHEN app_uniq LIKE '%prod%' THEN 'Production'
+                        ELSE 'Other'
+                    END as environment,
+                    COUNT(*) as total_entries,
+                    COUNT(CASE WHEN pr_status = 'Open' THEN 1 END) as open_prs,
+                    COUNT(CASE WHEN pr_status = 'Merged' THEN 1 END) as merged_prs
+                FROM ${this.schema}.${this.tableName}
+                GROUP BY 
+                    CASE 
+                        WHEN app_uniq LIKE '%uat%' THEN 'UAT'
+                        WHEN app_uniq LIKE '%dit%' THEN 'DIT'
+                        WHEN app_uniq LIKE '%prod%' THEN 'Production'
+                        ELSE 'Other'
+                    END
+                ORDER BY total_entries DESC
+            `);
+            return result.rows;
+        } catch (error) {
+            throw new Error(`Failed to fetch environment stats: ${error.message}`);
+        }
+    }
+
+    // Optimization history operations - Keep existing logic
     async getAllOptimizationHistory() {
         try {
             const result = await this.pool.query(`
@@ -245,7 +246,7 @@ class DatabaseService {
         }
     }
 
-    // Dump operations
+    // Dump operations - Updated to use actual table
     async createDump() {
         try {
             const [utilizationData, historyData] = await Promise.all([
@@ -260,7 +261,7 @@ class DatabaseService {
                 metadata: {
                     total_apps: utilizationData.length,
                     total_optimizations: historyData.length,
-                    environments: [...new Set(utilizationData.map(app => app.env))],
+                    environments: [...new Set(utilizationData.map(app => app.app_uniq.split('-').pop()))],
                     projects: [...new Set(utilizationData.map(app => app.project))]
                 }
             };
@@ -299,68 +300,11 @@ class DatabaseService {
 
             const data = JSON.parse(fs.readFileSync(dumpPath, 'utf8'));
             
-            // Clear existing data
-            await this.clearTables();
-            
-            // Restore resource utilization data
-            if (data.resource_utilization) {
-                for (const record of data.resource_utilization) {
-                    await this.insertResourceUtilization(record);
-                }
-            }
-            
-            // Restore optimization history data
-            if (data.optimization_history) {
-                for (const record of data.optimization_history) {
-                    await this.addOptimizationRecord(record);
-                }
-            }
-
-            return true;
+            // Note: Restore functionality may need adjustment based on actual table structure
+            console.log('Restore functionality requires table structure validation');
+            return { message: 'Restore functionality needs table structure validation' };
         } catch (error) {
             throw new Error(`Failed to restore from dump: ${error.message}`);
-        }
-    }
-
-    async clearTables() {
-        try {
-            await this.pool.query('DELETE FROM optimization_history');
-            await this.pool.query('DELETE FROM resource_utilization');
-            await this.pool.query('ALTER SEQUENCE resource_utilization_id_seq RESTART WITH 1');
-            await this.pool.query('ALTER SEQUENCE optimization_history_id_seq RESTART WITH 1');
-        } catch (error) {
-            throw new Error(`Failed to clear tables: ${error.message}`);
-        }
-    }
-
-    async insertResourceUtilization(data) {
-        try {
-            const query = `
-                INSERT INTO resource_utilization 
-                (app_uniq, project, pr_url, pr_status, app_name, app_id, env, max_cpu, avg_cpu, req_cpu, new_req_cpu, max_cpu_uti)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                RETURNING *
-            `;
-            
-            const values = [
-                data.app_uniq,
-                data.project,
-                data.pr_url,
-                data.pr_status,
-                data.app_name,
-                data.app_id,
-                data.env,
-                data.max_cpu,
-                data.avg_cpu,
-                data.req_cpu,
-                data.new_req_cpu,
-                data.max_cpu_uti
-            ];
-
-            const result = await this.pool.query(query, values);
-            return result.rows[0];
-        } catch (error) {
-            throw new Error(`Failed to insert resource utilization: ${error.message}`);
         }
     }
 
