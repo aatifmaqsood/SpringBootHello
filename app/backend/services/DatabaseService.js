@@ -132,10 +132,9 @@ class DatabaseService {
                     req_cpu,
                     new_req_cpu,
                     max_cpu_utilz_percent,
-                    tier,
-                    created_at
+                    tier
                 FROM ${this.schema}.${this.tableName}
-                ORDER BY created_at DESC
+                ORDER BY app_uniq
             `);
             return result.rows;
         } catch (error) {
@@ -160,11 +159,10 @@ class DatabaseService {
                     req_cpu,
                     new_req_cpu,
                     max_cpu_utilz_percent,
-                    tier,
-                    created_at
+                    tier
                 FROM ${this.schema}.${this.tableName}
                 WHERE env = $1
-                ORDER BY created_at DESC
+                ORDER BY app_uniq
             `, [env]);
             return result.rows;
         } catch (error) {
@@ -188,11 +186,10 @@ class DatabaseService {
                     req_cpu,
                     new_req_cpu,
                     max_cpu_utilz_percent,
-                    tier,
-                    created_at
+                    tier
                 FROM ${this.schema}.${this.tableName}
                 WHERE project = $1
-                ORDER BY created_at DESC
+                ORDER BY app_uniq
             `, [project]);
             return result.rows;
         } catch (error) {
@@ -200,9 +197,9 @@ class DatabaseService {
         }
     }
 
-    async getOverprovisionedApps(threshold = 80) {
+    async getOverprovisionedApps(threshold = 50) {
         try {
-            // Use the actual CPU utilization data from your table
+            // Use new threshold: max CPU utilization below 50% of requested CPU
             const result = await this.pool.query(`
                 SELECT 
                     app_uniq,
@@ -218,11 +215,12 @@ class DatabaseService {
                     new_req_cpu,
                     max_cpu_utilz_percent,
                     tier,
-                    created_at
+                    (max_cpu_utilz_percent / 100.0) * req_cpu as actual_cpu_used,
+                    req_cpu * 0.5 as threshold_cpu
                 FROM ${this.schema}.${this.tableName}
-                WHERE max_cpu_utilz_percent > $1
-                ORDER BY max_cpu_utilz_percent DESC
-            `, [threshold]);
+                WHERE (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5)
+                ORDER BY (req_cpu - (max_cpu_utilz_percent / 100.0) * req_cpu) DESC
+            `);
             return result.rows;
         } catch (error) {
             throw new Error(`Failed to fetch overprovisioned apps: ${error.message}`);
@@ -231,18 +229,19 @@ class DatabaseService {
 
     async getOptimizationRecommendations() {
         try {
-            // Use actual CPU utilization data for optimization recommendations
+            // Use new threshold: max CPU utilization below 50% of requested CPU
             const result = await this.pool.query(`
                 SELECT 
                     project,
                     COUNT(*) as total_apps,
-                    COUNT(CASE WHEN max_cpu_utilz_percent > 80 THEN 1 END) as overprovisioned_apps,
-                    COUNT(CASE WHEN max_cpu_utilz_percent <= 80 THEN 1 END) as properly_provisioned_apps,
+                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN 1 END) as overprovisioned_apps,
+                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu >= (req_cpu * 0.5) THEN 1 END) as properly_provisioned_apps,
                     AVG(max_cpu_utilz_percent) as avg_cpu_utilization,
-                    SUM(req_cpu - new_req_cpu) as potential_cpu_savings
+                    SUM(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN req_cpu - new_req_cpu ELSE 0 END) as potential_cpu_savings
                 FROM ${this.schema}.${this.tableName}
                 WHERE req_cpu > new_req_cpu
                 GROUP BY project
+                HAVING COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN 1 END) > 0
                 ORDER BY potential_cpu_savings DESC
             `);
             return result.rows;
@@ -258,11 +257,11 @@ class DatabaseService {
                 SELECT 
                     project,
                     COUNT(*) as total_entries,
-                    COUNT(CASE WHEN max_cpu_utilz_percent > 80 THEN 1 END) as overprovisioned_apps,
-                    COUNT(CASE WHEN max_cpu_utilz_percent <= 80 THEN 1 END) as properly_provisioned_apps,
+                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN 1 END) as overprovisioned_apps,
+                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu >= (req_cpu * 0.5) THEN 1 END) as properly_provisioned_apps,
                     COUNT(DISTINCT app_uniq) as unique_apps,
                     AVG(max_cpu_utilz_percent) as avg_cpu_utilization,
-                    SUM(req_cpu - new_req_cpu) as potential_cpu_savings
+                    SUM(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN req_cpu - new_req_cpu ELSE 0 END) as potential_cpu_savings
                 FROM ${this.schema}.${this.tableName}
                 GROUP BY project
                 ORDER BY total_entries DESC
@@ -280,8 +279,8 @@ class DatabaseService {
                 SELECT 
                     env as environment,
                     COUNT(*) as total_entries,
-                    COUNT(CASE WHEN max_cpu_utilz_percent > 80 THEN 1 END) as overprovisioned_apps,
-                    COUNT(CASE WHEN max_cpu_utilz_percent <= 80 THEN 1 END) as properly_provisioned_apps,
+                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN 1 END) as overprovisioned_apps,
+                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu >= (req_cpu * 0.5) THEN 1 END) as properly_provisioned_apps,
                     AVG(max_cpu_utilz_percent) as avg_cpu_utilization
                 FROM ${this.schema}.${this.tableName}
                 GROUP BY env
