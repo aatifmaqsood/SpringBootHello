@@ -69,9 +69,9 @@ const ResourceUtilization = () => {
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
       filtered = filtered.filter(app => 
-        app.app_name.toLowerCase().includes(searchLower) ||
-        app.app_id.toLowerCase().includes(searchLower) ||
-        app.project.toLowerCase().includes(searchLower)
+        (app.app_name && app.app_name.toLowerCase().includes(searchLower)) ||
+        (app.app_id && app.app_id.toLowerCase().includes(searchLower)) ||
+        (app.project && app.project.toLowerCase().includes(searchLower))
       );
     }
 
@@ -89,8 +89,8 @@ const ResourceUtilization = () => {
     }
   };
 
-  const environments = [...new Set(data.map(app => app.env))];
-  const projects = [...new Set(data.map(app => app.project))];
+  const environments = [...new Set(data.map(app => app.env).filter(Boolean))];
+  const projects = [...new Set(data.map(app => app.project).filter(Boolean))];
 
   if (loading) {
     return (
@@ -102,6 +102,14 @@ const ResourceUtilization = () => {
 
   if (error) {
     return <Alert severity="error">{error}</Alert>;
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <Alert severity="info">
+        No resource utilization data available. Please check your database connection.
+      </Alert>
+    );
   }
 
   return (
@@ -195,42 +203,45 @@ const ResourceUtilization = () => {
                   <TableRow key={`${app.app_id}-${app.env}`}>
                     <TableCell>
                       <Typography variant="subtitle2">
-                        {app.app_name}
+                        {app.app_name || 'N/A'}
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Chip label={app.app_id} size="small" variant="outlined" />
+                      <Chip label={app.app_id || 'N/A'} size="small" variant="outlined" />
                     </TableCell>
-                    <TableCell>{app.project}</TableCell>
+                    <TableCell>{app.project || 'N/A'}</TableCell>
                     <TableCell>
                       <Chip 
-                        label={app.env.toUpperCase()} 
+                        label={(app.env || 'unknown').toUpperCase()} 
                         size="small" 
                         color="primary" 
                         variant="outlined"
                       />
                     </TableCell>
-                    <TableCell>{app.max_cpu}</TableCell>
-                    <TableCell>{app.avg_cpu}</TableCell>
-                    <TableCell>{app.req_cpu}</TableCell>
+                    <TableCell>{app.max_cpu || 'N/A'}</TableCell>
+                    <TableCell>{app.avg_cpu || 'N/A'}</TableCell>
+                    <TableCell>{app.req_cpu || 'N/A'}</TableCell>
                     <TableCell>
                       <Typography 
                         variant="body2" 
-                        color={app.req_cpu > app.new_req_cpu ? 'success.main' : 'text.primary'}
+                        color={app.req_cpu && app.new_req_cpu && app.req_cpu > app.new_req_cpu ? 'success.main' : 'text.primary'}
                       >
-                        {app.new_req_cpu}
+                        {app.new_req_cpu || 'N/A'}
                       </Typography>
                     </TableCell>
                     <TableCell>
                       <Chip 
-                        label={`${app.max_cpu_utilz_percent}%`}
-                        color={(app.max_cpu_utilz_percent / 100.0) * app.req_cpu < (app.req_cpu * 0.5) ? 'warning' : 'success'}
+                        label={`${app.max_cpu_utilz_percent || 0}%`}
+                        color={app.max_cpu_utilz_percent && app.req_cpu ? 
+                          ((app.max_cpu_utilz_percent / 100.0) * app.req_cpu < (app.req_cpu * 0.5) ? 'warning' : 'success') : 
+                          'default'
+                        }
                         size="small"
                       />
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={app.pr_status}
+                        label={app.pr_status || 'Unknown'}
                         color={getStatusColor(app.pr_status)}
                         size="small"
                       />
