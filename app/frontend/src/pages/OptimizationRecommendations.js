@@ -55,15 +55,13 @@ const OptimizationRecommendations = () => {
       // First, always fetch resource utilization data
       const utilizationRes = await axios.get('/api/resource-utilization');
       
-      // Debug: Log the raw data to see what we're getting
-      console.log('Raw utilization data sample:', utilizationRes.data.slice(0, 3));
-      
       // Try to fetch optimization recommendations, but don't fail if it doesn't work
       let recommendationsData = [];
+      let usingBackendData = false;
       try {
         const recommendationsRes = await axios.get('/api/optimization-recommendations');
         recommendationsData = recommendationsRes.data;
-        console.log('Backend recommendations data:', recommendationsData);
+        usingBackendData = true;
       } catch (recError) {
         console.warn('Optimization recommendations endpoint failed, using resource utilization data:', recError.message);
         // If optimization recommendations fail, process the resource utilization data
@@ -107,13 +105,9 @@ const OptimizationRecommendations = () => {
 
       setData({
         recommendations: recommendationsData,
-        utilization: utilizationRes.data
+        utilization: utilizationRes.data,
+        usingBackendData: usingBackendData
       });
-      
-      // Debug logging
-      console.log('Processed recommendations data:', recommendationsData);
-      console.log('Total overprovisioned apps:', recommendationsData.reduce((sum, rec) => sum + parseInt(rec.overprovisioned_apps || 0), 0));
-      console.log('Total CPU savings:', recommendationsData.reduce((sum, rec) => sum + parseInt(rec.potential_cpu_savings || 0), 0));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -166,6 +160,17 @@ const OptimizationRecommendations = () => {
     );
   }
 
+  // Calculate summary values with proper type conversion
+  const totalOverprovisioned = data.recommendations.reduce((sum, rec) => {
+    const value = parseInt(rec.overprovisioned_apps || 0);
+    return sum + value;
+  }, 0);
+
+  const totalCpuSavings = data.recommendations.reduce((sum, rec) => {
+    const value = parseInt(rec.potential_cpu_savings || 0);
+    return sum + value;
+  }, 0);
+
   // Prepare chart data
   const chartData = data.recommendations.map(rec => ({
     name: rec.project,
@@ -175,7 +180,6 @@ const OptimizationRecommendations = () => {
     potential_savings: parseInt(rec.potential_cpu_savings || 0)
   }));
 
-  const totalOverprovisioned = data.recommendations.reduce((sum, rec) => sum + parseInt(rec.overprovisioned_apps || 0), 0);
   const totalProperlyProvisioned = data.recommendations.reduce((sum, rec) => sum + parseInt(rec.properly_provisioned_apps || 0), 0);
 
   const pieData = [
@@ -225,7 +229,7 @@ const OptimizationRecommendations = () => {
                 Overprovisioned Apps
               </Typography>
               <Typography variant="h4" color="warning.main">
-                {data.recommendations.reduce((sum, rec) => sum + (rec.overprovisioned_apps || 0), 0)}
+                {totalOverprovisioned}
               </Typography>
             </CardContent>
           </Card>
@@ -237,7 +241,7 @@ const OptimizationRecommendations = () => {
                 Total CPU Savings
               </Typography>
               <Typography variant="h4" color="success.main">
-                {data.recommendations.reduce((sum, rec) => sum + (rec.potential_cpu_savings || 0), 0)}
+                {totalCpuSavings}
               </Typography>
             </CardContent>
           </Card>
