@@ -124,7 +124,15 @@ class DatabaseService {
                     project,
                     pr_url,
                     pr_status,
-                    branch_nm,
+                    app_name,
+                    app_id,
+                    env,
+                    max_cpu,
+                    avg_cpu,
+                    req_cpu,
+                    new_req_cpu,
+                    max_cpu_utilz_percent,
+                    tier,
                     created_at
                 FROM ${this.schema}.${this.tableName}
                 ORDER BY created_at DESC
@@ -137,19 +145,27 @@ class DatabaseService {
 
     async getResourceUtilizationByEnv(env) {
         try {
-            // Extract environment from app_uniq (e.g., 'uat', 'dit' from 'aaogateway-uat')
+            // Use the actual env column from your table
             const result = await this.pool.query(`
                 SELECT 
                     app_uniq,
                     project,
                     pr_url,
                     pr_status,
-                    branch_nm,
+                    app_name,
+                    app_id,
+                    env,
+                    max_cpu,
+                    avg_cpu,
+                    req_cpu,
+                    new_req_cpu,
+                    max_cpu_utilz_percent,
+                    tier,
                     created_at
                 FROM ${this.schema}.${this.tableName}
-                WHERE app_uniq LIKE $1
+                WHERE env = $1
                 ORDER BY created_at DESC
-            `, [`%${env}%`]);
+            `, [env]);
             return result.rows;
         } catch (error) {
             throw new Error(`Failed to fetch resource utilization for env ${env}: ${error.message}`);
@@ -164,7 +180,15 @@ class DatabaseService {
                     project,
                     pr_url,
                     pr_status,
-                    branch_nm,
+                    app_name,
+                    app_id,
+                    env,
+                    max_cpu,
+                    avg_cpu,
+                    req_cpu,
+                    new_req_cpu,
+                    max_cpu_utilz_percent,
+                    tier,
                     created_at
                 FROM ${this.schema}.${this.tableName}
                 WHERE project = $1
@@ -178,20 +202,27 @@ class DatabaseService {
 
     async getOverprovisionedApps(threshold = 80) {
         try {
-            // Since your table doesn't have CPU utilization data, 
-            // we'll focus on PR status and project analysis
+            // Use the actual CPU utilization data from your table
             const result = await this.pool.query(`
                 SELECT 
                     app_uniq,
                     project,
                     pr_url,
                     pr_status,
-                    branch_nm,
+                    app_name,
+                    app_id,
+                    env,
+                    max_cpu,
+                    avg_cpu,
+                    req_cpu,
+                    new_req_cpu,
+                    max_cpu_utilz_percent,
+                    tier,
                     created_at
                 FROM ${this.schema}.${this.tableName}
-                WHERE pr_status = 'Open'
-                ORDER BY created_at DESC
-            `);
+                WHERE max_cpu_utilz_percent > $1
+                ORDER BY max_cpu_utilz_percent DESC
+            `, [threshold]);
             return result.rows;
         } catch (error) {
             throw new Error(`Failed to fetch overprovisioned apps: ${error.message}`);
@@ -200,16 +231,19 @@ class DatabaseService {
 
     async getOptimizationRecommendations() {
         try {
-            // Focus on projects with open PRs that might need attention
+            // Use actual CPU utilization data for optimization recommendations
             const result = await this.pool.query(`
                 SELECT 
                     project,
-                    COUNT(*) as open_prs,
-                    COUNT(CASE WHEN pr_status = 'Open' THEN 1 END) as pending_prs,
-                    COUNT(CASE WHEN pr_status = 'Merged' THEN 1 END) as merged_prs
+                    COUNT(*) as total_apps,
+                    COUNT(CASE WHEN max_cpu_utilz_percent > 80 THEN 1 END) as overprovisioned_apps,
+                    COUNT(CASE WHEN max_cpu_utilz_percent <= 80 THEN 1 END) as properly_provisioned_apps,
+                    AVG(max_cpu_utilz_percent) as avg_cpu_utilization,
+                    SUM(req_cpu - new_req_cpu) as potential_cpu_savings
                 FROM ${this.schema}.${this.tableName}
+                WHERE req_cpu > new_req_cpu
                 GROUP BY project
-                ORDER BY open_prs DESC
+                ORDER BY potential_cpu_savings DESC
             `);
             return result.rows;
         } catch (error) {
@@ -224,9 +258,11 @@ class DatabaseService {
                 SELECT 
                     project,
                     COUNT(*) as total_entries,
-                    COUNT(CASE WHEN pr_status = 'Open' THEN 1 END) as open_prs,
-                    COUNT(CASE WHEN pr_status = 'Merged' THEN 1 END) as merged_prs,
-                    COUNT(DISTINCT app_uniq) as unique_apps
+                    COUNT(CASE WHEN max_cpu_utilz_percent > 80 THEN 1 END) as overprovisioned_apps,
+                    COUNT(CASE WHEN max_cpu_utilz_percent <= 80 THEN 1 END) as properly_provisioned_apps,
+                    COUNT(DISTINCT app_uniq) as unique_apps,
+                    AVG(max_cpu_utilz_percent) as avg_cpu_utilization,
+                    SUM(req_cpu - new_req_cpu) as potential_cpu_savings
                 FROM ${this.schema}.${this.tableName}
                 GROUP BY project
                 ORDER BY total_entries DESC
@@ -242,23 +278,13 @@ class DatabaseService {
         try {
             const result = await this.pool.query(`
                 SELECT 
-                    CASE 
-                        WHEN app_uniq LIKE '%uat%' THEN 'UAT'
-                        WHEN app_uniq LIKE '%dit%' THEN 'DIT'
-                        WHEN app_uniq LIKE '%prod%' THEN 'Production'
-                        ELSE 'Other'
-                    END as environment,
+                    env as environment,
                     COUNT(*) as total_entries,
-                    COUNT(CASE WHEN pr_status = 'Open' THEN 1 END) as open_prs,
-                    COUNT(CASE WHEN pr_status = 'Merged' THEN 1 END) as merged_prs
+                    COUNT(CASE WHEN max_cpu_utilz_percent > 80 THEN 1 END) as overprovisioned_apps,
+                    COUNT(CASE WHEN max_cpu_utilz_percent <= 80 THEN 1 END) as properly_provisioned_apps,
+                    AVG(max_cpu_utilz_percent) as avg_cpu_utilization
                 FROM ${this.schema}.${this.tableName}
-                GROUP BY 
-                    CASE 
-                        WHEN app_uniq LIKE '%uat%' THEN 'UAT'
-                        WHEN app_uniq LIKE '%dit%' THEN 'DIT'
-                        WHEN app_uniq LIKE '%prod%' THEN 'Production'
-                        ELSE 'Other'
-                    END
+                GROUP BY env
                 ORDER BY total_entries DESC
             `);
             return result.rows;
@@ -338,7 +364,7 @@ class DatabaseService {
                 metadata: {
                     total_apps: utilizationData.length,
                     total_optimizations: historyData.length,
-                    environments: [...new Set(utilizationData.map(app => app.app_uniq.split('-').pop()))],
+                    environments: [...new Set(utilizationData.map(app => app.env))],
                     projects: [...new Set(utilizationData.map(app => app.project))]
                 }
             };
