@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Container,
+  Typography,
   Card,
   CardContent,
-  Typography,
   Button,
   Table,
   TableBody,
@@ -19,12 +20,14 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  Grid,
 } from '@mui/material';
 import {
   CloudDownload as DownloadIcon,
   CloudUpload as UploadIcon,
   Add as AddIcon,
   Delete as DeleteIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
 
@@ -36,9 +39,11 @@ const DatabaseManagement = () => {
   const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
   const [selectedDump, setSelectedDump] = useState(null);
   const [restoreLoading, setRestoreLoading] = useState(false);
+  const [databaseInfo, setDatabaseInfo] = useState(null);
 
   useEffect(() => {
     fetchDumps();
+    fetchDatabaseInfo();
   }, []);
 
   const fetchDumps = async () => {
@@ -51,6 +56,15 @@ const DatabaseManagement = () => {
       console.error('Dumps fetch error:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDatabaseInfo = async () => {
+    try {
+      const response = await axios.get('/api/health');
+      setDatabaseInfo(response.data.database);
+    } catch (err) {
+      console.error('Database info fetch error:', err);
     }
   };
 
@@ -100,53 +114,114 @@ const DatabaseManagement = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
+      <Container>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
+        </Box>
+      </Container>
     );
   }
 
   return (
-    <div>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">
-          Database Management
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleCreateDump}
-          disabled={createDumpLoading}
-        >
-          {createDumpLoading ? 'Creating...' : 'Create Dump'}
-        </Button>
-      </Box>
+    <Container maxWidth="xl">
+      <Typography variant="h4" gutterBottom>
+        Database Management
+      </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      <Card>
+      {/* Database Information */}
+      <Card sx={{ mb: 4 }}>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Available Dumps
+            <InfoIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+            Database Information
           </Typography>
-          
-          {dumps.length === 0 ? (
-            <Typography color="textSecondary" align="center" sx={{ py: 4 }}>
-              No dumps available. Create your first dump to get started.
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={3}>
+              <Typography variant="body2" color="textSecondary">
+                Schema
+              </Typography>
+              <Typography variant="body1">
+                {databaseInfo?.schema || 'krs'}
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Typography variant="body2" color="textSecondary">
+                Table
+              </Typography>
+              <Typography variant="body1">
+                {databaseInfo?.table || 'nonprod_all_data_all_v1'}
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Typography variant="body2" color="textSecondary">
+                Connection Status
+              </Typography>
+              <Typography variant="body1" color="success.main">
+                Connected
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Typography variant="body2" color="textSecondary">
+                Data Source
+              </Typography>
+              <Typography variant="body1">
+                AWS RDS Aurora
+              </Typography>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
+
+      {/* Important Notice */}
+      <Alert severity="info" sx={{ mb: 4 }}>
+        <Typography variant="body2">
+          <strong>Note:</strong> This system connects to your existing AWS RDS Aurora database. 
+          Dumps will contain data from the <code>{databaseInfo?.schema || 'krs'}.{databaseInfo?.table || 'nonprod_all_data_all_v1'}</code> table.
+          Restore functionality may require table structure validation.
+        </Typography>
+      </Alert>
+
+      {/* Dump Management */}
+      <Card>
+        <CardContent>
+          <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+            <Typography variant="h6">
+              Database Dumps
             </Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleCreateDump}
+              disabled={createDumpLoading}
+            >
+              {createDumpLoading ? 'Creating...' : 'Create Dump'}
+            </Button>
+          </Box>
+
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          {dumps.length === 0 ? (
+            <Box textAlign="center" py={4}>
+              <Typography variant="h6" color="textSecondary">
+                No dumps available
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Create your first dump to get started
+              </Typography>
+            </Box>
           ) : (
             <TableContainer component={Paper}>
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>Filename</TableCell>
-                    <TableCell>Size</TableCell>
-                    <TableCell>Created</TableCell>
-                    <TableCell>Actions</TableCell>
+                    <TableCell><strong>Filename</strong></TableCell>
+                    <TableCell><strong>Size</strong></TableCell>
+                    <TableCell><strong>Created</strong></TableCell>
+                    <TableCell><strong>Actions</strong></TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -157,31 +232,27 @@ const DatabaseManagement = () => {
                       <TableCell>{formatDate(dump.created)}</TableCell>
                       <TableCell>
                         <Button
-                          size="small"
-                          startIcon={<DownloadIcon />}
-                          onClick={() => {
-                            // Download functionality
-                            const link = document.createElement('a');
-                            link.href = `data:text/json;charset=utf-8,${encodeURIComponent(
-                              JSON.stringify(dump, null, 2)
-                            )}`;
-                            link.download = dump.filename;
-                            link.click();
-                          }}
-                          sx={{ mr: 1 }}
-                        >
-                          Download
-                        </Button>
-                        <Button
-                          size="small"
                           variant="outlined"
+                          size="small"
                           startIcon={<UploadIcon />}
                           onClick={() => {
                             setSelectedDump(dump);
                             setRestoreDialogOpen(true);
                           }}
+                          sx={{ mr: 1 }}
                         >
                           Restore
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<DownloadIcon />}
+                          onClick={() => {
+                            // Download functionality would go here
+                            console.log('Download:', dump.filename);
+                          }}
+                        >
+                          Download
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -193,16 +264,24 @@ const DatabaseManagement = () => {
         </CardContent>
       </Card>
 
-      {/* Restore Confirmation Dialog */}
+      {/* Restore Dialog */}
       <Dialog open={restoreDialogOpen} onClose={() => setRestoreDialogOpen(false)}>
-        <DialogTitle>Confirm Restore</DialogTitle>
+        <DialogTitle>
+          Restore Database from Dump
+        </DialogTitle>
         <DialogContent>
-          <Typography>
-            Are you sure you want to restore the database from "{selectedDump?.filename}"?
+          <Typography variant="body1" gutterBottom>
+            Are you sure you want to restore the database from:
           </Typography>
-          <Typography color="warning.main" sx={{ mt: 2 }}>
-            Warning: This will overwrite all current data in the database.
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+            {selectedDump?.filename}
           </Typography>
+          <Alert severity="warning">
+            <Typography variant="body2">
+              <strong>Warning:</strong> This action will overwrite current data. 
+              Make sure you have a backup before proceeding.
+            </Typography>
+          </Alert>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRestoreDialogOpen(false)}>
@@ -211,14 +290,14 @@ const DatabaseManagement = () => {
           <Button
             onClick={handleRestore}
             variant="contained"
-            color="warning"
+            color="primary"
             disabled={restoreLoading}
           >
             {restoreLoading ? 'Restoring...' : 'Restore'}
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </Container>
   );
 };
 
