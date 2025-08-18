@@ -233,11 +233,11 @@ class DatabaseService {
             const result = await this.pool.query(`
                 SELECT 
                     project,
-                    COUNT(*) as total_apps,
-                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN 1 END) as overprovisioned_apps,
-                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu >= (req_cpu * 0.5) THEN 1 END) as properly_provisioned_apps,
-                    AVG(max_cpu_utilz_percent) as avg_cpu_utilization,
-                    SUM(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN req_cpu - new_req_cpu ELSE 0 END) as potential_cpu_savings
+                    COUNT(*)::integer as total_apps,
+                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN 1 END)::integer as overprovisioned_apps,
+                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu >= (req_cpu * 0.5) THEN 1 END)::integer as properly_provisioned_apps,
+                    AVG(max_cpu_utilz_percent)::numeric(10,2) as avg_cpu_utilization,
+                    SUM(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN req_cpu - new_req_cpu ELSE 0 END)::integer as potential_cpu_savings
                 FROM ${this.schema}.${this.tableName}
                 WHERE req_cpu > new_req_cpu
                 GROUP BY project
@@ -256,12 +256,12 @@ class DatabaseService {
             const result = await this.pool.query(`
                 SELECT 
                     project,
-                    COUNT(*) as total_entries,
-                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN 1 END) as overprovisioned_apps,
-                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu >= (req_cpu * 0.5) THEN 1 END) as properly_provisioned_apps,
-                    COUNT(DISTINCT app_uniq) as unique_apps,
-                    AVG(max_cpu_utilz_percent) as avg_cpu_utilization,
-                    SUM(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN req_cpu - new_req_cpu ELSE 0 END) as potential_cpu_savings
+                    COUNT(*)::integer as total_entries,
+                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN 1 END)::integer as overprovisioned_apps,
+                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu >= (req_cpu * 0.5) THEN 1 END)::integer as properly_provisioned_apps,
+                    COUNT(DISTINCT app_uniq)::integer as unique_apps,
+                    AVG(max_cpu_utilz_percent)::numeric(10,2) as avg_cpu_utilization,
+                    SUM(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN req_cpu - new_req_cpu ELSE 0 END)::integer as potential_cpu_savings
                 FROM ${this.schema}.${this.tableName}
                 GROUP BY project
                 ORDER BY total_entries DESC
@@ -278,10 +278,10 @@ class DatabaseService {
             const result = await this.pool.query(`
                 SELECT 
                     env as environment,
-                    COUNT(*) as total_entries,
-                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN 1 END) as overprovisioned_apps,
-                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu >= (req_cpu * 0.5) THEN 1 END) as properly_provisioned_apps,
-                    AVG(max_cpu_utilz_percent) as avg_cpu_utilization
+                    COUNT(*)::integer as total_entries,
+                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu < (req_cpu * 0.5) THEN 1 END)::integer as overprovisioned_apps,
+                    COUNT(CASE WHEN (max_cpu_utilz_percent / 100.0) * req_cpu >= (req_cpu * 0.5) THEN 1 END)::integer as properly_provisioned_apps,
+                    AVG(max_cpu_utilz_percent)::numeric(10,2) as avg_cpu_utilization
                 FROM ${this.schema}.${this.tableName}
                 GROUP BY env
                 ORDER BY total_entries DESC
