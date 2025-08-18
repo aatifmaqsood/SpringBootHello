@@ -14,11 +14,12 @@ class DatabaseService {
             password: process.env.DB_PASSWORD || 'password',
             port: process.env.DB_PORT || 5432,
             options: `-c search_path=public,${this.schema}`,
-            // AWS RDS specific configurations
+            // AWS RDS specific configurations - SSL is REQUIRED
             ssl: {
-                rejectUnauthorized: false // For development - set to true in production
+                rejectUnauthorized: false,
+                require: true
             },
-            connectionTimeoutMillis: 10000,
+            connectionTimeoutMillis: 30000,
             idleTimeoutMillis: 30000,
             max: 20
         });
@@ -35,6 +36,18 @@ class DatabaseService {
 
     async initDatabase() {
         try {
+            // Debug: Show actual environment variable values
+            console.log('=== DATABASE CONNECTION DEBUG ===');
+            console.log('Environment variables loaded:');
+            console.log('DB_USER:', process.env.DB_USER);
+            console.log('DB_HOST:', process.env.DB_HOST);
+            console.log('DB_NAME:', process.env.DB_NAME);
+            console.log('DB_PORT:', process.env.DB_PORT);
+            console.log('DB_PASSWORD length:', process.env.DB_PASSWORD ? process.env.DB_PASSWORD.length : 'undefined');
+            console.log('DB_SCHEMA:', process.env.DB_SCHEMA);
+            console.log('DB_TABLE:', process.env.DB_TABLE);
+            console.log('================================');
+            
             // First test basic connection
             console.log('Testing database connection...');
             console.log(`Connection details: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
@@ -64,6 +77,7 @@ class DatabaseService {
                 console.error('2. User has access to the database');
                 console.error('3. Network/security group allows your connection');
                 console.error('4. SSL configuration is correct');
+                console.error('5. Your IP address (10.1.65.78) is allowed in RDS security group');
             } else if (error.code === 'ENOTFOUND') {
                 console.error('Host not found. Please check:');
                 console.error('1. Hostname is correct');
