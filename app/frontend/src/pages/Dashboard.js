@@ -75,8 +75,8 @@ const Dashboard = () => {
 
   // Prepare chart data
   const envData = data.resourceUtilization.reduce((acc, app) => {
-    // Extract environment from app_uniq (e.g., 'uat', 'dit' from 'aaogateway-uat')
-    const env = app.app_uniq.split('-').pop() || 'unknown';
+    // Use the actual env column from your table
+    const env = app.env || 'unknown';
     acc[env] = (acc[env] || 0) + 1;
     return acc;
   }, {});
@@ -97,16 +97,19 @@ const Dashboard = () => {
     count: count,
   }));
 
-  // PR Status analysis
-  const prStatusData = data.resourceUtilization.reduce((acc, app) => {
-    acc[app.pr_status] = (acc[app.pr_status] || 0) + 1;
-    return acc;
-  }, {});
-
-  const prStatusChartData = Object.entries(prStatusData).map(([status, count]) => ({
-    name: status,
-    count: count,
-  }));
+  // CPU Utilization analysis using actual data
+  const cpuUtilizationData = data.resourceUtilization
+    .filter(app => app.max_cpu_utilz_percent > 80)
+    .map(app => ({
+      app_name: app.app_name,
+      max_cpu_utilz_percent: app.max_cpu_utilz_percent,
+      req_cpu: app.req_cpu,
+      new_req_cpu: app.new_req_cpu,
+      project: app.project,
+      env: app.env
+    }))
+    .sort((a, b) => b.max_cpu_utilz_percent - a.max_cpu_utilz_percent)
+    .slice(0, 10);
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
@@ -146,11 +149,11 @@ const Dashboard = () => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Open PRs
+                Overprovisioned Apps
               </Typography>
               <Typography variant="h4" color="warning.main">
-                {data.summary.open_prs || 
-                 data.resourceUtilization.filter(app => app.pr_status === 'Open').length}
+                {data.summary.overprovisioned_count || 
+                 data.resourceUtilization.filter(app => app.max_cpu_utilz_percent > 80).length}
               </Typography>
             </CardContent>
           </Card>
@@ -159,11 +162,12 @@ const Dashboard = () => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Merged PRs
+                Avg CPU Utilization
               </Typography>
               <Typography variant="h4" color="success.main">
-                {data.summary.merged_prs || 
-                 data.resourceUtilization.filter(app => app.pr_status === 'Merged').length}
+                {data.summary.avg_cpu_utilization ? 
+                 `${data.summary.avg_cpu_utilization.toFixed(1)}%` :
+                 `${(data.resourceUtilization.reduce((sum, app) => sum + (app.max_cpu_utilz_percent || 0), 0) / data.resourceUtilization.length).toFixed(1)}%`}
               </Typography>
             </CardContent>
           </Card>
@@ -205,16 +209,16 @@ const Dashboard = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                PR Status Distribution
+                CPU Utilization by Application
               </Typography>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={prStatusChartData}>
+                <BarChart data={cpuUtilizationData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
+                  <XAxis dataKey="app_name" angle={-45} textAnchor="end" height={80} />
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="count" fill="#8884d8" name="Count" />
+                  <Bar dataKey="max_cpu_utilz_percent" fill="#8884d8" name="Max CPU %" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -258,20 +262,20 @@ const Dashboard = () => {
                       <Card variant="outlined">
                         <CardContent>
                           <Typography variant="subtitle2" gutterBottom>
-                            {app.app_uniq}
+                            {app.app_name}
                           </Typography>
                           <Typography variant="body2" color="textSecondary">
-                            {app.project}
+                            {app.project} - {app.env}
                           </Typography>
                           <Box sx={{ mt: 1 }}>
                             <Chip 
-                              label={app.pr_status} 
-                              color={app.pr_status === 'Open' ? 'warning' : 'success'} 
+                              label={`${app.max_cpu_utilz_percent}% CPU`} 
+                              color={app.max_cpu_utilz_percent > 80 ? 'warning' : 'success'} 
                               size="small" 
                               sx={{ mr: 1 }}
                             />
                             <Chip 
-                              label={app.branch_nm || 'No Branch'} 
+                              label={`${app.req_cpu} → ${app.new_req_cpu}`} 
                               color="info" 
                               size="small"
                             />
