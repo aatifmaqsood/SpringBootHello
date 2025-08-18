@@ -75,7 +75,9 @@ const Dashboard = () => {
 
   // Prepare chart data
   const envData = data.resourceUtilization.reduce((acc, app) => {
-    acc[app.env] = (acc[app.env] || 0) + 1;
+    // Extract environment from app_uniq (e.g., 'uat', 'dit' from 'aaogateway-uat')
+    const env = app.app_uniq.split('-').pop() || 'unknown';
+    acc[env] = (acc[env] || 0) + 1;
     return acc;
   }, {});
 
@@ -84,13 +86,7 @@ const Dashboard = () => {
     value: count,
   }));
 
-  const cpuUtilizationData = data.resourceUtilization.map(app => ({
-    app_name: app.app_name,
-    max_cpu: parseFloat(app.max_cpu_uti.replace(' API', '')),
-    req_cpu: app.req_cpu,
-    new_req_cpu: app.new_req_cpu,
-  }));
-
+  // Updated to work with actual table structure
   const projectData = data.resourceUtilization.reduce((acc, app) => {
     acc[app.project] = (acc[app.project] || 0) + 1;
     return acc;
@@ -98,6 +94,17 @@ const Dashboard = () => {
 
   const projectChartData = Object.entries(projectData).map(([project, count]) => ({
     name: project,
+    count: count,
+  }));
+
+  // PR Status analysis
+  const prStatusData = data.resourceUtilization.reduce((acc, app) => {
+    acc[app.pr_status] = (acc[app.pr_status] || 0) + 1;
+    return acc;
+  }, {});
+
+  const prStatusChartData = Object.entries(prStatusData).map(([status, count]) => ({
+    name: status,
     count: count,
   }));
 
@@ -127,10 +134,10 @@ const Dashboard = () => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Environments
+                Total Projects
               </Typography>
               <Typography variant="h4">
-                {data.summary.environments?.length || Object.keys(envData).length}
+                {data.summary.total_projects || Object.keys(projectData).length}
               </Typography>
             </CardContent>
           </Card>
@@ -139,13 +146,11 @@ const Dashboard = () => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Overprovisioned Apps
+                Open PRs
               </Typography>
               <Typography variant="h4" color="warning.main">
-                {data.summary.overprovisioned_count || 
-                 data.resourceUtilization.filter(app => 
-                   parseFloat(app.max_cpu_uti.replace(' API', '')) > 80
-                 ).length}
+                {data.summary.open_prs || 
+                 data.resourceUtilization.filter(app => app.pr_status === 'Open').length}
               </Typography>
             </CardContent>
           </Card>
@@ -154,13 +159,11 @@ const Dashboard = () => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Total CPU Savings
+                Merged PRs
               </Typography>
               <Typography variant="h4" color="success.main">
-                {data.summary.total_cpu_savings?.toFixed(0) || 
-                 data.resourceUtilization.reduce((sum, app) => 
-                   sum + (app.req_cpu - app.new_req_cpu), 0
-                 ).toFixed(0)}
+                {data.summary.merged_prs || 
+                 data.resourceUtilization.filter(app => app.pr_status === 'Merged').length}
               </Typography>
             </CardContent>
           </Card>
@@ -202,16 +205,16 @@ const Dashboard = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                CPU Utilization by Application
+                PR Status Distribution
               </Typography>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={cpuUtilizationData.slice(0, 10)}>
+                <BarChart data={prStatusChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="app_name" angle={-45} textAnchor="end" height={80} />
+                  <XAxis dataKey="name" />
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="max_cpu" fill="#8884d8" name="Max CPU %" />
+                  <Bar dataKey="count" fill="#8884d8" name="Count" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -239,37 +242,36 @@ const Dashboard = () => {
         </Grid>
       </Grid>
 
-      {/* Recent Overprovisioned Apps */}
+      {/* Recent Applications */}
       <Grid container spacing={3} sx={{ mt: 2 }}>
         <Grid item xs={12}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Recent Overprovisioned Applications
+                Recent Applications
               </Typography>
               <Grid container spacing={2}>
                 {data.resourceUtilization
-                  .filter(app => parseFloat(app.max_cpu_uti.replace(' API', '')) > 80)
                   .slice(0, 6)
                   .map((app, index) => (
                     <Grid item xs={12} sm={6} md={4} key={index}>
                       <Card variant="outlined">
                         <CardContent>
                           <Typography variant="subtitle2" gutterBottom>
-                            {app.app_name}
+                            {app.app_uniq}
                           </Typography>
                           <Typography variant="body2" color="textSecondary">
-                            {app.project} - {app.env}
+                            {app.project}
                           </Typography>
                           <Box sx={{ mt: 1 }}>
                             <Chip 
-                              label={`${app.max_cpu_uti}`} 
-                              color="warning" 
+                              label={app.pr_status} 
+                              color={app.pr_status === 'Open' ? 'warning' : 'success'} 
                               size="small" 
                               sx={{ mr: 1 }}
                             />
                             <Chip 
-                              label={`${app.req_cpu} → ${app.new_req_cpu}`} 
+                              label={app.branch_nm || 'No Branch'} 
                               color="info" 
                               size="small"
                             />
