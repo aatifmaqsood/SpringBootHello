@@ -6,7 +6,7 @@ import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import ResourceUtilization from './pages/ResourceUtilization';
 import OptimizationRecommendations from './pages/OptimizationRecommendations';
-import OptimizationHistory from './pages/OptimizationHistory';
+import PRStatusAnalysis from './pages/OptimizationHistory';
 import DatabaseManagement from './pages/DatabaseManagement';
 import './App.css';
 
@@ -34,7 +34,7 @@ function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/resource-utilization" element={<ResourceUtilization />} />
               <Route path="/optimization-recommendations" element={<OptimizationRecommendations />} />
-              <Route path="/optimization-history" element={<OptimizationHistory />} />
+              <Route path="/optimization-history" element={<PRStatusAnalysis />} />
               <Route path="/database" element={<DatabaseManagement />} />
             </Routes>
           </main>
