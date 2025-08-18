@@ -107,12 +107,7 @@ const OptimizationRecommendations = () => {
     return 'info';
   };
 
-  const getUtilizationColor = (utilization) => {
-    const value = parseFloat(utilization.replace(' API', ''));
-    if (value > 100) return 'error';
-    if (value > 80) return 'warning';
-    return 'success';
-  };
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
   if (loading) {
     return (
@@ -191,6 +186,15 @@ const OptimizationRecommendations = () => {
         </Grid>
       </Grid>
 
+      {/* Important Notice */}
+      <Alert severity="info" sx={{ mb: 4 }}>
+        <Typography variant="body2">
+          <strong>Optimization Criteria:</strong> Applications are considered overprovisioned when their 
+          maximum CPU utilization is below 50% of their requested CPU allocation. 
+          This ensures we only recommend optimizations for truly underutilized resources.
+        </Typography>
+      </Alert>
+
       {/* Recommendations Table */}
       <Card>
         <CardContent>
@@ -213,13 +217,13 @@ const OptimizationRecommendations = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell>App Name</TableCell>
-                    <TableCell>Environment</TableCell>
-                    <TableCell>Current CPU</TableCell>
-                    <TableCell>Recommended CPU</TableCell>
-                    <TableCell>Savings</TableCell>
-                    <TableCell>Utilization</TableCell>
-                    <TableCell>Actions</TableCell>
+                    <TableCell><strong>Project</strong></TableCell>
+                    <TableCell><strong>Total Apps</strong></TableCell>
+                    <TableCell><strong>Overprovisioned</strong></TableCell>
+                    <TableCell><strong>Avg CPU %</strong></TableCell>
+                    <TableCell><strong>Potential Savings</strong></TableCell>
+                    <TableCell><strong>Status</strong></TableCell>
+                    <TableCell><strong>Action</strong></TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -262,9 +266,9 @@ const OptimizationRecommendations = () => {
                         />
                       </TableCell>
                       <TableCell>
-                        <Chip
-                          label={app.max_cpu_uti}
-                          color={getUtilizationColor(app.max_cpu_uti)}
+                        <Chip 
+                          label={`${app.max_cpu_utilz_percent}%`}
+                          color={app.max_cpu_utilz_percent > 80 ? 'warning' : 'success'}
                           size="small"
                         />
                       </TableCell>
@@ -289,58 +293,39 @@ const OptimizationRecommendations = () => {
       </Card>
 
       {/* Optimization Dialog */}
-      <Dialog 
-        open={optimizeDialogOpen} 
-        onClose={() => setOptimizeDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
-          Execute Resource Optimization
+          Execute Optimization for {selectedProject?.project}
         </DialogTitle>
         <DialogContent>
-          {selectedApp && (
-            <Box>
-              <Typography variant="body1" gutterBottom>
-                <strong>Application:</strong> {selectedApp.app_name} ({selectedApp.app_id})
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                <strong>Environment:</strong> {selectedApp.env.toUpperCase()}
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                <strong>Current CPU Request:</strong> {selectedApp.req_cpu}
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                <strong>New CPU Request:</strong> {selectedApp.new_req_cpu}
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                <strong>CPU Savings:</strong> {selectedApp.cpu_savings_percent}%
-              </Typography>
-              
-              <TextField
-                fullWidth
-                multiline
-                rows={3}
-                label="Optimization Notes (Optional)"
-                value={optimizationNotes}
-                onChange={(e) => setOptimizationNotes(e.target.value)}
-                placeholder="Add any notes about this optimization..."
-                sx={{ mt: 2 }}
-              />
-            </Box>
-          )}
+          <Typography variant="body1" gutterBottom>
+            This will execute the optimization pipeline for the selected project.
+          </Typography>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>
+              Optimization Details:
+            </Typography>
+            <Typography variant="body2">
+              • Project: {selectedProject?.project}
+            </Typography>
+            <Typography variant="body2">
+              • Overprovisioned Apps: {selectedProject?.overprovisioned_apps}
+            </Typography>
+            <Typography variant="body2">
+              • Potential CPU Savings: {selectedProject?.potential_cpu_savings}
+            </Typography>
+            <Typography variant="body2">
+              • Average CPU Utilization: {parseFloat(selectedProject?.avg_cpu_utilization || 0).toFixed(1)}%
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
+              • Criteria: Apps using less than 50% of requested CPU
+            </Typography>
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOptimizeDialogOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={executeOptimization}
-            variant="contained"
-            disabled={optimizing}
-            startIcon={optimizing ? <CircularProgress size={20} /> : <PlayArrowIcon />}
-          >
-            {optimizing ? 'Executing...' : 'Execute Optimization'}
+          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleExecuteOptimization} variant="contained" color="primary">
+            Execute Optimization
           </Button>
         </DialogActions>
       </Dialog>
