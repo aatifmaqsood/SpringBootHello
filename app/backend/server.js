@@ -19,20 +19,28 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Initialize database service
 const dbService = new DatabaseService();
 
-// Initialize database on startup
+// Initialize database connection on startup
 dbService.initDatabase().catch(console.error);
 
 // Routes
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'OK', timestamp: new Date().toISOString() });
+    res.json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        database: {
+            schema: process.env.DB_SCHEMA || 'krs',
+            table: process.env.DB_TABLE || 'nonprod_all_data_all_v1'
+        }
+    });
 });
 
-// Resource utilization endpoints
+// Resource utilization endpoints - Updated to use actual table
 app.get('/api/resource-utilization', async (req, res) => {
     try {
         const data = await dbService.getAllResourceUtilization();
         res.json(data);
     } catch (error) {
+        console.error('Resource utilization fetch error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -42,15 +50,17 @@ app.get('/api/resource-utilization/env/:env', async (req, res) => {
         const data = await dbService.getResourceUtilizationByEnv(req.params.env);
         res.json(data);
     } catch (error) {
+        console.error('Environment-specific fetch error:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-app.get('/api/resource-utilization/app/:appId', async (req, res) => {
+app.get('/api/resource-utilization/project/:project', async (req, res) => {
     try {
-        const data = await dbService.getResourceUtilizationByAppId(req.params.appId);
+        const data = await dbService.getResourceUtilizationByProject(req.params.project);
         res.json(data);
     } catch (error) {
+        console.error('Project-specific fetch error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -61,6 +71,7 @@ app.get('/api/overprovisioned-apps', async (req, res) => {
         const data = await dbService.getOverprovisionedApps(parseInt(threshold));
         res.json(data);
     } catch (error) {
+        console.error('Overprovisioned apps fetch error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -70,6 +81,53 @@ app.get('/api/optimization-recommendations', async (req, res) => {
         const data = await dbService.getOptimizationRecommendations();
         res.json(data);
     } catch (error) {
+        console.error('Optimization recommendations fetch error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// New endpoints for project and environment statistics
+app.get('/api/projects/stats', async (req, res) => {
+    try {
+        const data = await dbService.getProjectStats();
+        res.json(data);
+    } catch (error) {
+        console.error('Project stats fetch error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/environments/stats', async (req, res) => {
+    try {
+        const data = await dbService.getEnvironmentStats();
+        res.json(data);
+    } catch (error) {
+        console.error('Environment stats fetch error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/projects/:projectName', async (req, res) => {
+    try {
+        const data = await dbService.getResourceUtilizationByProject(req.params.projectName);
+        res.json(data);
+    } catch (error) {
+        console.error('Project data fetch error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/projects/:projectName/stats', async (req, res) => {
+    try {
+        const projectStats = await dbService.getProjectStats();
+        const projectData = projectStats.find(p => p.project === req.params.projectName);
+        if (projectData) {
+            res.json(projectData);
+        } else {
+            res.status(404).json({ error: 'Project not found' });
+        }
+    } catch (error) {
+        console.error('Project stats fetch error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -80,6 +138,7 @@ app.get('/api/optimization-history', async (req, res) => {
         const data = await dbService.getAllOptimizationHistory();
         res.json(data);
     } catch (error) {
+        console.error('Optimization history fetch error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -89,6 +148,7 @@ app.post('/api/optimization-history', async (req, res) => {
         const data = await dbService.addOptimizationRecord(req.body);
         res.status(201).json(data);
     } catch (error) {
+        console.error('Optimization record creation error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -99,6 +159,7 @@ app.put('/api/optimization-history/:id', async (req, res) => {
         const data = await dbService.updateOptimizationStatus(req.params.id, status, pr_url);
         res.json(data);
     } catch (error) {
+        console.error('Optimization status update error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -109,6 +170,7 @@ app.post('/api/dump', async (req, res) => {
         const dumpFile = await dbService.createDump();
         res.json({ message: 'Database dump created successfully', file: dumpFile });
     } catch (error) {
+        console.error('Dump creation error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -118,46 +180,43 @@ app.get('/api/dumps', async (req, res) => {
         const dumps = await dbService.listDumps();
         res.json(dumps);
     } catch (error) {
+        console.error('Dumps listing error:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
 app.post('/api/restore/:dumpFile', async (req, res) => {
     try {
-        await dbService.restoreFromDump(req.params.dumpFile);
-        res.json({ message: 'Database restored successfully' });
+        const result = await dbService.restoreFromDump(req.params.dumpFile);
+        res.json(result);
     } catch (error) {
+        console.error('Restore error:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Statistics endpoints
+// Statistics endpoints - Updated to use your actual table structure
 app.get('/api/stats/summary', async (req, res) => {
     try {
-        const [utilizationData, historyData] = await Promise.all([
+        const [utilizationData, projectStats, envStats] = await Promise.all([
             dbService.getAllResourceUtilization(),
-            dbService.getAllOptimizationHistory()
+            dbService.getProjectStats(),
+            dbService.getEnvironmentStats()
         ]);
 
         const summary = {
             total_apps: utilizationData.length,
-            total_optimizations: historyData.length,
-            environments: [...new Set(utilizationData.map(app => app.env))],
-            projects: [...new Set(utilizationData.map(app => app.project))],
-            overprovisioned_count: utilizationData.filter(app => {
-                const utilization = parseFloat(app.max_cpu_uti.replace(' API', ''));
-                return utilization > 80;
-            }).length,
-            total_cpu_savings: utilizationData.reduce((sum, app) => {
-                return sum + (app.req_cpu - app.new_req_cpu);
-            }, 0),
-            avg_cpu_utilization: utilizationData.reduce((sum, app) => {
-                return sum + parseFloat(app.max_cpu_uti.replace(' API', ''));
-            }, 0) / utilizationData.length
+            total_projects: projectStats.length,
+            environments: envStats.map(env => env.environment),
+            projects: projectStats.map(proj => proj.project),
+            open_prs: projectStats.reduce((sum, proj) => sum + parseInt(proj.open_prs), 0),
+            merged_prs: projectStats.reduce((sum, proj) => sum + parseInt(proj.merged_prs), 0),
+            project_breakdown: projectStats
         };
 
         res.json(summary);
     } catch (error) {
+        console.error('Summary statistics error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -189,9 +248,11 @@ process.on('SIGTERM', async () => {
 // Start server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    console.log(`Database: ${process.env.DB_SCHEMA || 'krs'}.${process.env.DB_TABLE || 'nonprod_all_data_all_v1'}`);
     console.log(`Health check: http://localhost:${PORT}/api/health`);
     console.log(`Resource utilization: http://localhost:${PORT}/api/resource-utilization`);
-    console.log(`Overprovisioned apps: http://localhost:${PORT}/api/overprovisioned-apps`);
+    console.log(`Project stats: http://localhost:${PORT}/api/projects/stats`);
+    console.log(`Environment stats: http://localhost:${PORT}/api/environments/stats`);
 });
 
 module.exports = app;
