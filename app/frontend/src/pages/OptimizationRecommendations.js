@@ -51,13 +51,58 @@ const OptimizationRecommendations = () => {
   const fetchOptimizationData = async () => {
     try {
       setLoading(true);
-      const [recommendationsRes, utilizationRes] = await Promise.all([
-        axios.get('/api/optimization-recommendations'),
-        axios.get('/api/resource-utilization')
-      ]);
+      
+      // First, always fetch resource utilization data
+      const utilizationRes = await axios.get('/api/resource-utilization');
+      
+      // Try to fetch optimization recommendations, but don't fail if it doesn't work
+      let recommendationsData = [];
+      try {
+        const recommendationsRes = await axios.get('/api/optimization-recommendations');
+        recommendationsData = recommendationsRes.data;
+      } catch (recError) {
+        console.warn('Optimization recommendations endpoint failed, using resource utilization data:', recError.message);
+        // If optimization recommendations fail, process the resource utilization data
+        const utilizationData = utilizationRes.data;
+        
+        // Group by project and calculate optimization metrics
+        const projectGroups = {};
+        utilizationData.forEach(app => {
+          if (!projectGroups[app.project]) {
+            projectGroups[app.project] = {
+              project: app.project,
+              total_apps: 0,
+              overprovisioned_apps: 0,
+              properly_provisioned_apps: 0,
+              total_cpu_utilization: 0,
+              potential_cpu_savings: 0
+            };
+          }
+          
+          projectGroups[app.project].total_apps++;
+          projectGroups[app.project].total_cpu_utilization += parseFloat(app.max_cpu_utilz_percent || 0);
+          
+          // Check if app is overprovisioned (using < 50% of requested CPU)
+          const actualCpuUsed = (parseFloat(app.max_cpu_utilz_percent || 0) / 100.0) * app.req_cpu;
+          const thresholdCpu = app.req_cpu * 0.5;
+          
+          if (actualCpuUsed < thresholdCpu) {
+            projectGroups[app.project].overprovisioned_apps++;
+            projectGroups[app.project].potential_cpu_savings += (app.req_cpu - app.new_req_cpu);
+          } else {
+            projectGroups[app.project].properly_provisioned_apps++;
+          }
+        });
+        
+        // Convert to array and calculate averages
+        recommendationsData = Object.values(projectGroups).map(project => ({
+          ...project,
+          avg_cpu_utilization: project.total_apps > 0 ? (project.total_cpu_utilization / project.total_apps) : 0
+        })).filter(project => project.overprovisioned_apps > 0); // Only show projects with overprovisioned apps
+      }
 
       setData({
-        recommendations: recommendationsRes.data,
+        recommendations: recommendationsData,
         utilization: utilizationRes.data
       });
     } catch (err) {
@@ -101,23 +146,34 @@ const OptimizationRecommendations = () => {
     );
   }
 
+  // Check if data exists
+  if (!data || !data.recommendations) {
+    return (
+      <Container>
+        <Alert severity="warning" sx={{ mt: 2 }}>
+          No optimization data available. Please check your database connection.
+        </Alert>
+      </Container>
+    );
+  }
+
   // Prepare chart data
   const chartData = data.recommendations.map(rec => ({
     name: rec.project,
-    overprovisioned: rec.overprovisioned_apps,
-    properly_provisioned: rec.properly_provisioned_apps,
+    overprovisioned: rec.overprovisioned_apps || 0,
+    properly_provisioned: rec.properly_provisioned_apps || 0,
     avg_cpu: parseFloat(rec.avg_cpu_utilization || 0).toFixed(1),
-    potential_savings: rec.potential_cpu_savings
+    potential_savings: rec.potential_cpu_savings || 0
   }));
 
   const pieData = [
     {
       name: 'Overprovisioned',
-      value: data.recommendations.reduce((sum, rec) => sum + rec.overprovisioned_apps, 0)
+      value: data.recommendations.reduce((sum, rec) => sum + (rec.overprovisioned_apps || 0), 0)
     },
     {
       name: 'Properly Provisioned',
-      value: data.recommendations.reduce((sum, rec) => sum + rec.properly_provisioned_apps, 0)
+      value: data.recommendations.reduce((sum, rec) => sum + (rec.properly_provisioned_apps || 0), 0)
     }
   ];
 
@@ -157,7 +213,7 @@ const OptimizationRecommendations = () => {
                 Overprovisioned Apps
               </Typography>
               <Typography variant="h4" color="warning.main">
-                {data.recommendations.reduce((sum, rec) => sum + rec.overprovisioned_apps, 0)}
+                {data.recommendations.reduce((sum, rec) => sum + (rec.overprovisioned_apps || 0), 0)}
               </Typography>
             </CardContent>
           </Card>
@@ -266,11 +322,11 @@ const OptimizationRecommendations = () => {
                 {data.recommendations.map((rec, index) => (
                   <TableRow key={index}>
                     <TableCell>{rec.project}</TableCell>
-                    <TableCell>{rec.total_apps}</TableCell>
+                    <TableCell>{rec.total_apps || 0}</TableCell>
                     <TableCell>
                       <Chip 
-                        label={rec.overprovisioned_apps} 
-                        color={rec.overprovisioned_apps > 0 ? "warning" : "success"}
+                        label={rec.overprovisioned_apps || 0} 
+                        color={(rec.overprovisioned_apps || 0) > 0 ? "warning" : "success"}
                         size="small"
                       />
                     </TableCell>
@@ -284,13 +340,13 @@ const OptimizationRecommendations = () => {
                     </TableCell>
                     <TableCell>
                       <Chip 
-                        label={rec.overprovisioned_apps > 0 ? "Needs Optimization" : "Optimized"}
-                        color={rec.overprovisioned_apps > 0 ? "warning" : "success"}
+                        label={(rec.overprovisioned_apps || 0) > 0 ? "Needs Optimization" : "Optimized"}
+                        color={(rec.overprovisioned_apps || 0) > 0 ? "warning" : "success"}
                         size="small"
                       />
                     </TableCell>
                     <TableCell>
-                      {rec.overprovisioned_apps > 0 && (
+                      {(rec.overprovisioned_apps || 0) > 0 && (
                         <Button
                           variant="contained"
                           size="small"
@@ -326,10 +382,10 @@ const OptimizationRecommendations = () => {
               • Project: {selectedProject?.project}
             </Typography>
             <Typography variant="body2">
-              • Overprovisioned Apps: {selectedProject?.overprovisioned_apps}
+              • Overprovisioned Apps: {selectedProject?.overprovisioned_apps || 0}
             </Typography>
             <Typography variant="body2">
-              • Potential CPU Savings: {selectedProject?.potential_cpu_savings}
+              • Potential CPU Savings: {selectedProject?.potential_cpu_savings || 0}
             </Typography>
             <Typography variant="body2">
               • Average CPU Utilization: {parseFloat(selectedProject?.avg_cpu_utilization || 0).toFixed(1)}%
