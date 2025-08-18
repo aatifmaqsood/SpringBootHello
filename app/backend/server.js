@@ -144,37 +144,37 @@ app.get('/api/projects/:projectName/stats', async (req, res) => {
     }
 });
 
-// Optimization history endpoints
-app.get('/api/optimization-history', async (req, res) => {
-    try {
-        const data = await dbService.getAllOptimizationHistory();
-        res.json(data);
-    } catch (error) {
-        console.error('Optimization history fetch error:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
+// Optimization history endpoints - Commented out since optimization_history table doesn't exist
+// app.get('/api/optimization-history', async (req, res) => {
+//     try {
+//         const data = await dbService.getAllOptimizationHistory();
+//         res.json(data);
+//     } catch (error) {
+//         console.error('Optimization history fetch error:', error);
+//         res.status(500).json({ error: error.message });
+//     }
+// });
 
-app.post('/api/optimization-history', async (req, res) => {
-    try {
-        const data = await dbService.addOptimizationRecord(req.body);
-        res.status(201).json(data);
-    } catch (error) {
-        console.error('Optimization record creation error:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
+// app.post('/api/optimization-history', async (req, res) => {
+//     try {
+//         const data = await dbService.addOptimizationRecord(req.body);
+//         res.status(201).json(data);
+//     } catch (error) {
+//         console.error('Optimization record creation error:', error);
+//         res.status(500).json({ error: error.message });
+//     }
+// });
 
-app.put('/api/optimization-history/:id', async (req, res) => {
-    try {
-        const { status, pr_url } = req.body;
-        const data = await dbService.updateOptimizationStatus(req.params.id, status, pr_url);
-        res.json(data);
-    } catch (error) {
-        console.error('Optimization status update error:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
+// app.put('/api/optimization-history/:id', async (req, res) => {
+//     try {
+//         const { status, pr_url } = req.body;
+//         const data = await dbService.updateOptimizationStatus(req.params.id, status, pr_url);
+//         res.json(data);
+//     } catch (error) {
+//         console.error('Optimization status update error:', error);
+//         res.status(500).json({ error: error.message });
+//     }
+// });
 
 // Database dump endpoints
 app.post('/api/dump', async (req, res) => {
@@ -221,9 +221,14 @@ app.get('/api/stats/summary', async (req, res) => {
             total_projects: projectStats.length,
             environments: envStats.map(env => env.environment),
             projects: projectStats.map(proj => proj.project),
-            overprovisioned_count: utilizationData.filter(app => app.max_cpu_utilz_percent > 80).length,
+            overprovisioned_count: utilizationData.filter(app => (app.max_cpu_utilz_percent / 100.0) * app.req_cpu < (app.req_cpu * 0.5)).length,
             avg_cpu_utilization: utilizationData.reduce((sum, app) => sum + (app.max_cpu_utilz_percent || 0), 0) / utilizationData.length,
-            total_cpu_savings: utilizationData.reduce((sum, app) => sum + (app.req_cpu - app.new_req_cpu), 0),
+            total_cpu_savings: utilizationData.reduce((sum, app) => {
+                if ((app.max_cpu_utilz_percent / 100.0) * app.req_cpu < (app.req_cpu * 0.5)) {
+                    return sum + (app.req_cpu - app.new_req_cpu);
+                }
+                return sum;
+            }, 0),
             project_breakdown: projectStats
         };
 
