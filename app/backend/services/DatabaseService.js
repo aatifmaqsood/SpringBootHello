@@ -10,10 +10,10 @@ class DatabaseService {
         this.pool = new Pool({
             user: process.env.DB_USER || 'postgres',
             host: process.env.DB_HOST || 'localhost',
-            database: process.env.DB_NAME || 'resource_utilization',
+            database: process.env.DB_NAME || 'krs',
             password: process.env.DB_PASSWORD || 'password',
             port: process.env.DB_PORT || 5432,
-            options: `-c search_path=${this.schema},public`
+            options: `-c search_path=public,${this.schema}`
         });
         
         this.dumpDir = path.join(__dirname, '../dumps');
@@ -28,12 +28,27 @@ class DatabaseService {
 
     async initDatabase() {
         try {
-            // Verify connection to existing table
+            // First test basic connection
+            console.log('Testing database connection...');
+            console.log(`Connection details: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
+            console.log(`User: ${process.env.DB_USER}, Schema: ${this.schema}, Table: ${this.tableName}`);
+            
+            // Test basic connection first
+            const testResult = await this.pool.query('SELECT current_database(), current_user, current_schemas()');
+            console.log('Basic connection successful:', testResult.rows[0]);
+            
+            // Now try to access the specific table
             const result = await this.pool.query(`SELECT COUNT(*) FROM ${this.schema}.${this.tableName}`);
             console.log(`Connected to existing database successfully: ${this.schema}.${this.tableName}`);
             console.log(`Total rows in table: ${result.rows[0].count}`);
         } catch (error) {
             console.error('Database connection error:', error);
+            console.error('Error details:', {
+                code: error.code,
+                detail: error.detail,
+                hint: error.hint,
+                position: error.position
+            });
             throw error;
         }
     }
