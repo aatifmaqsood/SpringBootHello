@@ -165,8 +165,10 @@ const Dashboard = () => {
               </Typography>
               <Typography variant="h4" color="success.main">
                 {data.summary.avg_cpu_utilization ? 
-                 `${data.summary.avg_cpu_utilization.toFixed(1)}%` :
-                 `${(data.resourceUtilization.reduce((sum, app) => sum + (app.max_cpu_utilz_percent || 0), 0) / data.resourceUtilization.length).toFixed(1)}%`}
+                 `${parseFloat(data.summary.avg_cpu_utilization || 0).toFixed(1)}%` :
+                 data.resourceUtilization.length > 0 ?
+                 `${(data.resourceUtilization.reduce((sum, app) => sum + parseFloat(app.max_cpu_utilz_percent || 0), 0) / data.resourceUtilization.length).toFixed(1)}%` :
+                 '0%'}
               </Typography>
             </CardContent>
           </Card>
