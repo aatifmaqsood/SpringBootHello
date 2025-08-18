@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Container,
+  Typography,
   Card,
   CardContent,
-  Typography,
+  Grid,
   Table,
   TableBody,
   TableCell,
@@ -13,123 +15,126 @@ import {
   Box,
   Alert,
   CircularProgress,
-  Chip,
   Button,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
-  Grid,
+  Chip,
 } from '@mui/material';
 import {
-  TrendingUp as TrendingUpIcon,
-  PlayArrow as PlayArrowIcon,
-  CheckCircle as CheckCircleIcon,
-} from '@mui/icons-material';
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts';
 import axios from 'axios';
 
 const OptimizationRecommendations = () => {
-  const [data, setData] = useState([]);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedApp, setSelectedApp] = useState(null);
-  const [optimizeDialogOpen, setOptimizeDialogOpen] = useState(false);
-  const [optimizing, setOptimizing] = useState(false);
-  const [optimizationNotes, setOptimizationNotes] = useState('');
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
-    fetchData();
+    fetchOptimizationData();
   }, []);
 
-  const fetchData = async () => {
+  const fetchOptimizationData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/optimization-recommendations');
-      setData(response.data);
+      const [recommendationsRes, utilizationRes] = await Promise.all([
+        axios.get('/api/optimization-recommendations'),
+        axios.get('/api/resource-utilization')
+      ]);
+
+      setData({
+        recommendations: recommendationsRes.data,
+        utilization: utilizationRes.data
+      });
     } catch (err) {
-      setError('Failed to fetch optimization recommendations');
-      console.error('Data fetch error:', err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOptimize = (app) => {
-    setSelectedApp(app);
-    setOptimizationNotes('');
-    setOptimizeDialogOpen(true);
+  const handleOptimize = (project) => {
+    setSelectedProject(project);
+    setDialogOpen(true);
   };
 
-  const executeOptimization = async () => {
-    if (!selectedApp) return;
-
-    try {
-      setOptimizing(true);
-      
-      // Create optimization record
-      const optimizationData = {
-        app_uniq: selectedApp.app_uniq,
-        app_id: selectedApp.app_id,
-        env: selectedApp.env,
-        old_req_cpu: selectedApp.req_cpu,
-        new_req_cpu: selectedApp.new_req_cpu,
-        status: 'pending',
-        notes: optimizationNotes
-      };
-
-      await axios.post('/api/optimization-history', optimizationData);
-      
-      // Close dialog and refresh data
-      setOptimizeDialogOpen(false);
-      setSelectedApp(null);
-      setOptimizationNotes('');
-      
-      // Show success message
-      setError(null);
-      
-      // Refresh recommendations (remove the optimized app)
-      setData(data.filter(app => 
-        !(app.app_id === selectedApp.app_id && app.env === selectedApp.env)
-      ));
-      
-    } catch (err) {
-      setError('Failed to execute optimization');
-      console.error('Optimization error:', err);
-    } finally {
-      setOptimizing(false);
-    }
-  };
-
-  const getSavingsColor = (savings) => {
-    if (savings > 50) return 'success';
-    if (savings > 25) return 'warning';
-    return 'info';
+  const handleExecuteOptimization = () => {
+    // Here you would implement the actual optimization logic
+    console.log('Executing optimization for:', selectedProject);
+    setDialogOpen(false);
+    setSelectedProject(null);
   };
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
+      <Container>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress />
+        </Box>
+      </Container>
     );
   }
 
   if (error) {
-    return <Alert severity="error">{error}</Alert>;
+    return (
+      <Container>
+        <Alert severity="error" sx={{ mt: 2 }}>
+          Error loading optimization recommendations: {error}
+        </Alert>
+      </Container>
+    );
   }
 
+  // Prepare chart data
+  const chartData = data.recommendations.map(rec => ({
+    name: rec.project,
+    overprovisioned: rec.overprovisioned_apps,
+    properly_provisioned: rec.properly_provisioned_apps,
+    avg_cpu: parseFloat(rec.avg_cpu_utilization || 0).toFixed(1),
+    potential_savings: rec.potential_cpu_savings
+  }));
+
+  const pieData = [
+    {
+      name: 'Overprovisioned',
+      value: data.recommendations.reduce((sum, rec) => sum + rec.overprovisioned_apps, 0)
+    },
+    {
+      name: 'Properly Provisioned',
+      value: data.recommendations.reduce((sum, rec) => sum + rec.properly_provisioned_apps, 0)
+    }
+  ];
+
   return (
-    <div>
+    <Container maxWidth="xl">
       <Typography variant="h4" gutterBottom>
         Optimization Recommendations
       </Typography>
 
-      <Typography variant="body1" color="textSecondary" sx={{ mb: 3 }}>
-        Applications that can be optimized for better resource utilization and cost savings.
-      </Typography>
+      {/* Important Notice */}
+      <Alert severity="info" sx={{ mb: 4 }}>
+        <Typography variant="body2">
+          <strong>Optimization Criteria:</strong> Applications are considered overprovisioned when their 
+          maximum CPU utilization is below 50% of their requested CPU allocation. 
+          This ensures we only recommend optimizations for truly underutilized resources.
+        </Typography>
+      </Alert>
 
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -137,10 +142,22 @@ const OptimizationRecommendations = () => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Total Recommendations
+                Total Projects
               </Typography>
               <Typography variant="h4">
-                {data.length}
+                {data.recommendations.length}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Typography color="textSecondary" gutterBottom>
+                Overprovisioned Apps
+              </Typography>
+              <Typography variant="h4" color="warning.main">
+                {data.recommendations.reduce((sum, rec) => sum + rec.overprovisioned_apps, 0)}
               </Typography>
             </CardContent>
           </Card>
@@ -152,7 +169,7 @@ const OptimizationRecommendations = () => {
                 Total CPU Savings
               </Typography>
               <Typography variant="h4" color="success.main">
-                {data.reduce((sum, app) => sum + (app.req_cpu - app.new_req_cpu), 0).toFixed(0)}
+                {data.recommendations.reduce((sum, rec) => sum + (rec.potential_cpu_savings || 0), 0)}
               </Typography>
             </CardContent>
           </Card>
@@ -161,134 +178,134 @@ const OptimizationRecommendations = () => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Avg Savings %
+                Avg CPU Utilization
               </Typography>
-              <Typography variant="h4" color="warning.main">
-                {data.length > 0 
-                  ? (data.reduce((sum, app) => sum + app.cpu_savings_percent, 0) / data.length).toFixed(1)
-                  : 0
-                }%
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                High Priority
-              </Typography>
-              <Typography variant="h4" color="error.main">
-                {data.filter(app => app.cpu_savings_percent > 50).length}
+              <Typography variant="h4">
+                {data.recommendations.length > 0 
+                  ? `${(data.recommendations.reduce((sum, rec) => sum + parseFloat(rec.avg_cpu_utilization || 0), 0) / data.recommendations.length).toFixed(1)}%`
+                  : '0%'
+                }
               </Typography>
             </CardContent>
           </Card>
-        </Grid>
       </Grid>
 
-      {/* Important Notice */}
-      <Alert severity="info" sx={{ mb: 4 }}>
-        <Typography variant="body2">
-          <strong>Optimization Criteria:</strong> Applications are considered overprovisioned when their 
-          maximum CPU utilization is below 50% of their requested CPU allocation. 
-          This ensures we only recommend optimizations for truly underutilized resources.
-        </Typography>
-      </Alert>
+      {/* Charts */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Provisioning Status by Project
+              </Typography>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="overprovisioned" fill="#ff6b6b" name="Overprovisioned" />
+                  <Bar dataKey="properly_provisioned" fill="#51cf66" name="Properly Provisioned" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Overall Provisioning Distribution
+              </Typography>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </Grid>
+        </Grid>
+      </Grid>
 
       {/* Recommendations Table */}
       <Card>
         <CardContent>
           <Typography variant="h6" gutterBottom>
-            Optimization Opportunities ({data.length} applications)
+            Detailed Optimization Recommendations
           </Typography>
-          
-          {data.length === 0 ? (
-            <Box textAlign="center" py={4}>
-              <CheckCircleIcon color="success" sx={{ fontSize: 64, mb: 2 }} />
-              <Typography variant="h6" color="success.main">
-                No optimization recommendations found
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                All applications are optimally provisioned!
-              </Typography>
-            </Box>
-          ) : (
-            <TableContainer component={Paper}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell><strong>Project</strong></TableCell>
-                    <TableCell><strong>Total Apps</strong></TableCell>
-                    <TableCell><strong>Overprovisioned</strong></TableCell>
-                    <TableCell><strong>Avg CPU %</strong></TableCell>
-                    <TableCell><strong>Potential Savings</strong></TableCell>
-                    <TableCell><strong>Status</strong></TableCell>
-                    <TableCell><strong>Action</strong></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {data.map((app) => (
-                    <TableRow key={`${app.app_id}-${app.env}`}>
-                      <TableCell>
-                        <Box>
-                          <Typography variant="subtitle2">
-                            {app.app_name}
-                          </Typography>
-                          <Typography variant="caption" color="textSecondary">
-                            {app.app_id}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={app.env.toUpperCase()} 
-                          size="small" 
-                          color="primary" 
-                          variant="outlined"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">
-                          {app.req_cpu}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" color="success.main">
-                          {app.new_req_cpu}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={`${app.cpu_savings_percent}%`}
-                          color={getSavingsColor(app.cpu_savings_percent)}
-                          size="small"
-                          icon={<TrendingUpIcon />}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={`${app.max_cpu_utilz_percent}%`}
-                          color={app.max_cpu_utilz_percent > 80 ? 'warning' : 'success'}
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell><strong>Project</strong></TableCell>
+                  <TableCell><strong>Total Apps</strong></TableCell>
+                  <TableCell><strong>Overprovisioned</strong></TableCell>
+                  <TableCell><strong>Avg CPU %</strong></TableCell>
+                  <TableCell><strong>Potential Savings</strong></TableCell>
+                  <TableCell><strong>Status</strong></TableCell>
+                  <TableCell><strong>Action</strong></TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data.recommendations.map((rec, index) => (
+                  <TableRow key={index}>
+                    <TableCell>{rec.project}</TableCell>
+                    <TableCell>{rec.total_apps}</TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={rec.overprovisioned_apps} 
+                        color={rec.overprovisioned_apps > 0 ? "warning" : "success"}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>{parseFloat(rec.avg_cpu_utilization || 0).toFixed(1)}%</TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={`${rec.potential_cpu_savings || 0} CPU`}
+                        color="info"
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={rec.overprovisioned_apps > 0 ? "Needs Optimization" : "Optimized"}
+                        color={rec.overprovisioned_apps > 0 ? "warning" : "success"}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {rec.overprovisioned_apps > 0 && (
                         <Button
                           variant="contained"
                           size="small"
-                          startIcon={<PlayArrowIcon />}
-                          onClick={() => handleOptimize(app)}
                           color="primary"
+                          onClick={() => handleOptimize(rec)}
                         >
                           Optimize
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         </CardContent>
       </Card>
 
@@ -329,7 +346,7 @@ const OptimizationRecommendations = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </Container>
   );
 };
 
