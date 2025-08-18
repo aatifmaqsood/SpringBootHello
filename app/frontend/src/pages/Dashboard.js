@@ -99,16 +99,18 @@ const Dashboard = () => {
 
   // CPU Utilization analysis using actual data
   const cpuUtilizationData = data.resourceUtilization
-    .filter(app => app.max_cpu_utilz_percent > 80)
+    .filter(app => (app.max_cpu_utilz_percent / 100.0) * app.req_cpu < (app.req_cpu * 0.5))
     .map(app => ({
       app_name: app.app_name,
       max_cpu_utilz_percent: app.max_cpu_utilz_percent,
       req_cpu: app.req_cpu,
       new_req_cpu: app.new_req_cpu,
       project: app.project,
-      env: app.env
+      env: app.env,
+      actual_cpu_used: (app.max_cpu_utilz_percent / 100.0) * app.req_cpu,
+      threshold_cpu: app.req_cpu * 0.5
     }))
-    .sort((a, b) => b.max_cpu_utilz_percent - a.max_cpu_utilz_percent)
+    .sort((a, b) => (b.req_cpu - b.actual_cpu_used) - (a.req_cpu - a.actual_cpu_used))
     .slice(0, 10);
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
@@ -153,7 +155,7 @@ const Dashboard = () => {
               </Typography>
               <Typography variant="h4" color="warning.main">
                 {data.summary.overprovisioned_count || 
-                 data.resourceUtilization.filter(app => app.max_cpu_utilz_percent > 80).length}
+                 data.resourceUtilization.filter(app => (app.max_cpu_utilz_percent / 100.0) * app.req_cpu < (app.req_cpu * 0.5)).length}
               </Typography>
             </CardContent>
           </Card>
@@ -270,7 +272,7 @@ const Dashboard = () => {
                           <Box sx={{ mt: 1 }}>
                             <Chip 
                               label={`${app.max_cpu_utilz_percent}% CPU`} 
-                              color={app.max_cpu_utilz_percent > 80 ? 'warning' : 'success'} 
+                              color={(app.max_cpu_utilz_percent / 100.0) * app.req_cpu < (app.req_cpu * 0.5) ? 'warning' : 'success'} 
                               size="small" 
                               sx={{ mr: 1 }}
                             />
