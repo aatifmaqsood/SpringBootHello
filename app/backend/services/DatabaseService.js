@@ -7,6 +7,10 @@ class DatabaseService {
         this.schema = process.env.DB_SCHEMA || 'krs';
         this.tableName = process.env.DB_TABLE || 'nonprod_all_data_all_v1';
         
+        console.log('DatabaseService initialized with:');
+        console.log('  Schema:', this.schema);
+        console.log('  Table:', this.tableName);
+        
         this.pool = new Pool({
             user: process.env.DB_USER || 'krs_app_rw',
             host: process.env.DB_HOST || 'krs-aurora-cluster-identifier.cluster-ro-chh1bxuyaidj.us-east-1.rds.amazonaws.com',
@@ -53,8 +57,8 @@ class DatabaseService {
             console.log(`Connection details: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`);
             console.log(`User: ${process.env.DB_USER}, Schema: ${this.schema}, Table: ${this.tableName}`);
             
-            // Test basic connection first
-            const testResult = await this.pool.query('SELECT current_database(), current_user, current_schemas()');
+            // Test basic connection first - use simpler query for older PostgreSQL versions
+            const testResult = await this.pool.query('SELECT current_database(), current_user, version()');
             console.log('Basic connection successful:', testResult.rows[0]);
             
             // Now try to access the specific table
@@ -78,6 +82,23 @@ class DatabaseService {
                 console.error('3. Network/security group allows your connection');
                 console.error('4. SSL configuration is correct');
                 console.error('5. Your IP address (10.1.65.78) is allowed in RDS security group');
+            } else if (error.code === '42883') {
+                console.error('Function not found. This might be a PostgreSQL version compatibility issue.');
+                console.error('Trying alternative connection test...');
+                // Try a simpler test
+                try {
+                    const simpleTest = await this.pool.query('SELECT 1 as test');
+                    console.log('Simple connection test successful:', simpleTest.rows[0]);
+                    
+                    // Now try to access the specific table
+                    const result = await this.pool.query(`SELECT COUNT(*) FROM ${this.schema}.${this.tableName}`);
+                    console.log(`Connected to existing database successfully: ${this.schema}.${this.tableName}`);
+                    console.log(`Total rows in table: ${result.rows[0].count}`);
+                    return; // Success!
+                } catch (innerError) {
+                    console.error('Alternative connection test also failed:', innerError.message);
+                    throw innerError;
+                }
             } else if (error.code === 'ENOTFOUND') {
                 console.error('Host not found. Please check:');
                 console.error('1. Hostname is correct');
