@@ -41,5 +41,34 @@
 
 **Goal**: Build production-optimized pipeline that gives users full control over resource optimization through Jenkins pipeline parameters.
 
-**Summary**: This approach creates a completely new, production  pipeline designed specifically for production resource optimization requirements. The system is built from the ground up to provide application-centric resource analysis with comprehensive metrics and recommendations. Unlike the enhanced approach, this pipeline is manually triggered by users through Jenkins, where developers can pass application ID and CPU recommendations as parameters directly to the pipeline. The system includes built-in production safety measures and provides PR creation based on the parameters passed by developers, ensuring that all optimization decisions are user-controlled through pipeline parameters rather than automated or UI-based. This approach offers maximum flexibility and production safety by being designed specifically for production environments and integrates seamlessly with existing Jenkins workflows, though it requires more development effort and introduces a new pipeline interface for users to learn.
+**Summary**: This approach creates a completely new, production  pipeline designed specifically for production resource optimization requirements. The system is built from the ground up to provide application-centric resource analysis with comprehensive metrics and recommendations. Unlike the enhanced approach, this pipeline is manually triggered by users through Jenkins, where developers can pass application ID  as parameters directly to the pipeline. The system includes built-in production safety measures and provides PR creation based on the parameters passed by developers, ensuring that all optimization decisions are user-controlled through pipeline parameters rather than automated or UI-based. This approach offers maximum flexibility and production safety by being designed specifically for production environments and integrates seamlessly with existing Jenkins workflows, though it requires more development effort and introduces a new pipeline interface for users to learn.
 
+Architecture
+```
+┌─────────────────┐    ┌────────────────────┐ 
+│ Manual          │    │ Application ID     │    
+│ Pipeline        │───►│ CPU Request        │
+│ Trigger         │    │(Jenkins Paramaters)| 
+│ (User Initiated)│    │                    │  
+└─────────────────┘    └────────────────────┘   
+                                │                        
+                                ▼                       
+                       ┌──────────────────┐   
+                       │ Clone            │   
+                       │ App              │   
+                       │ Repo             │    
+                       └──────────────────┘    
+                                │                        
+                                ▼                
+                       ┌─────────────────────────┐    
+                       │Do Changes in values.yaml│    
+                       │                         │   
+                       │                         │ 
+                       └─────────────────────────┘ 
+                                        │
+                                        ▼
+                       ┌─────────────────────────────────────────────┐    
+                       │ Raise PR                    │    
+                       │           │   
+                       │   │ 
+                       └─────────────────────────────────────────────┘ 
