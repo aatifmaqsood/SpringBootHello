@@ -197,6 +197,33 @@ class DatabaseService {
         }
     }
 
+    async getResourceUtilizationByAppId(appId) {
+        try {
+            const result = await this.pool.query(`
+                SELECT 
+                    app_uniq,
+                    project,
+                    pr_url,
+                    pr_status,
+                    app_name,
+                    app_id,
+                    env,
+                    max_cpu,
+                    avg_cpu,
+                    req_cpu,
+                    new_req_cpu,
+                    max_cpu_utilz_percent,
+                    tier
+                FROM ${this.schema}.${this.tableName}
+                WHERE app_id = $1
+                ORDER BY app_uniq
+            `, [appId]);
+            return result.rows;
+        } catch (error) {
+            throw new Error(`Failed to fetch resource utilization for app ID ${appId}: ${error.message}`);
+        }
+    }
+
     async getOverprovisionedApps(threshold = 50) {
         try {
             // Use new threshold: max CPU utilization below 50% of requested CPU
@@ -397,16 +424,168 @@ class DatabaseService {
         try {
             const dumpPath = path.join(this.dumpDir, dumpFile);
             if (!fs.existsSync(dumpPath)) {
-                throw new Error('Dump file not found');
+                throw new Error(`Dump file ${dumpFile} not found`);
             }
 
-            const data = JSON.parse(fs.readFileSync(dumpPath, 'utf8'));
+            const dumpData = JSON.parse(fs.readFileSync(dumpPath, 'utf8'));
             
-            // Note: Restore functionality may need adjustment based on actual table structure
-            console.log('Restore functionality requires table structure validation');
-            return { message: 'Restore functionality needs table structure validation' };
+            // Clear existing data
+            await this.pool.query(`DELETE FROM ${this.schema}.${this.tableName}`);
+            
+            // Insert restored data
+            for (const record of dumpData) {
+                const columns = Object.keys(record).join(', ');
+                const values = Object.values(record);
+                const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+                
+                await this.pool.query(
+                    `INSERT INTO ${this.schema}.${this.tableName} (${columns}) VALUES (${placeholders})`,
+                    values
+                );
+            }
+            
+            return { message: 'Database restored successfully', records: dumpData.length };
         } catch (error) {
-            throw new Error(`Failed to restore from dump: ${error.message}`);
+            console.error('Restore error:', error);
+            throw error;
+        }
+    }
+
+    // New PR Status Methods
+    async getPRsByStatus(status, project = null, environment = null) {
+        try {
+            let query = `SELECT * FROM ${this.schema}.${this.tableName} WHERE pr_status = $1`;
+            let params = [status];
+            let paramIndex = 2;
+
+            if (project) {
+                query += ` AND project = $${paramIndex}`;
+                params.push(project);
+                paramIndex++;
+            }
+
+            if (environment) {
+                query += ` AND env = $${paramIndex}`;
+                params.push(environment);
+                paramIndex++;
+            }
+
+            query += ` ORDER BY project, env, app_name`;
+
+            const result = await this.pool.query(query, params);
+            return result.rows;
+        } catch (error) {
+            console.error('Error fetching PRs by status:', error);
+            throw error;
+        }
+    }
+
+    async getOpenPRs(project = null, environment = null) {
+        try {
+            let query = `SELECT * FROM ${this.schema}.${this.tableName} WHERE pr_status IN ('open', 'OPEN', 'Open')`;
+            let params = [];
+            let paramIndex = 1;
+
+            if (project) {
+                query += ` AND project = $${paramIndex}`;
+                params.push(project);
+                paramIndex++;
+            }
+
+            if (environment) {
+                query += ` AND env = $${paramIndex}`;
+                params.push(environment);
+                paramIndex++;
+            }
+
+            query += ` ORDER BY project, env, app_name`;
+
+            const result = await this.pool.query(query, params);
+            return result.rows;
+        } catch (error) {
+            console.error('Error fetching open PRs:', error);
+            throw error;
+        }
+    }
+
+    async getMergedPRs(project = null, environment = null) {
+        try {
+            let query = `SELECT * FROM ${this.schema}.${this.tableName} WHERE pr_status IN ('merged', 'MERGED', 'Merged')`;
+            let params = [];
+            let paramIndex = 1;
+
+            if (project) {
+                query += ` AND project = $${paramIndex}`;
+                params.push(project);
+                paramIndex++;
+            }
+
+            if (environment) {
+                query += ` AND env = $${paramIndex}`;
+                params.push(environment);
+                paramIndex++;
+            }
+
+            query += ` ORDER BY project, env, app_name`;
+
+            const result = await this.pool.query(query, params);
+            return result.rows;
+        } catch (error) {
+            console.error('Error fetching merged PRs:', error);
+            throw error;
+        }
+    }
+
+    async getPRCounts(project = null, environment = null) {
+        try {
+            let whereClause = '';
+            let params = [];
+            let paramIndex = 1;
+
+            if (project) {
+                whereClause += ` WHERE project = $${paramIndex}`;
+                params.push(project);
+                paramIndex++;
+            }
+
+            if (environment) {
+                whereClause += whereClause ? ` AND env = $${paramIndex}` : ` WHERE env = $${paramIndex}`;
+                params.push(environment);
+                paramIndex++;
+            }
+
+            const query = `
+                SELECT 
+                    pr_status,
+                    COUNT(*) as count,
+                    project,
+                    env
+                FROM ${this.schema}.${this.tableName}
+                ${whereClause}
+                GROUP BY pr_status, project, env
+                ORDER BY project, env, pr_status
+            `;
+
+            const result = await this.pool.query(query, params);
+            return result.rows;
+        } catch (error) {
+            console.error('Error fetching PR counts:', error);
+            throw error;
+        }
+    }
+
+    async createOptimizationPR(prData) {
+        try {
+            // For now, just return a success response
+            // In a real implementation, this would create a Git PR and store the details
+            return {
+                id: Date.now(), // Generate a unique ID
+                prUrl: `https://github.com/your-org/your-repo/pull/${Date.now()}`,
+                status: 'pending',
+                createdAt: prData.createdAt
+            };
+        } catch (error) {
+            throw new Error(`Failed to create optimization PR: ${error.message}`);
         }
     }
 
