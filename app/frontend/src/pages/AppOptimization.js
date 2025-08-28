@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import {
   Container,
   Paper,
@@ -18,7 +19,6 @@ import {
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  Memory as MemoryIcon,
   Speed as SpeedIcon,
   TrendingUp as TrendingUpIcon,
   Create as CreateIcon,
@@ -34,6 +34,47 @@ const AppOptimization = () => {
   const [appData, setAppData] = useState(null);
   const [searchPerformed, setSearchPerformed] = useState(false);
 
+  // Generate recommendations based on real data
+  const generateRecommendations = (appData) => {
+    const recommendations = [];
+    
+    // CPU optimization recommendation
+    if (appData.req_cpu && appData.max_cpu_utilz_percent) {
+      const currentCpu = appData.req_cpu;
+      const utilization = parseFloat(appData.max_cpu_utilz_percent);
+      const actualCpuUsed = (utilization / 100.0) * currentCpu;
+      const thresholdCpu = currentCpu * 0.5;
+      
+      if (actualCpuUsed < thresholdCpu) {
+        const recommendedCpu = Math.max(Math.ceil(actualCpuUsed * 1.2), 100); // Add 20% buffer, minimum 100m
+        const potentialSavings = Math.round(((currentCpu - recommendedCpu) / currentCpu) * 100);
+        
+        recommendations.push({
+          type: 'CPU',
+          current: `${currentCpu}m`,
+          recommended: `${recommendedCpu}m`,
+          potentialSavings: `${potentialSavings}%`,
+          risk: potentialSavings > 50 ? 'High' : potentialSavings > 30 ? 'Medium' : 'Low',
+          reasoning: `Current utilization is ${utilization.toFixed(1)}% with peaks. Recommended reduction from ${currentCpu}m to ${recommendedCpu}m for optimal resource usage.`
+        });
+      }
+    }
+    
+    // If no specific recommendations, provide general guidance
+    if (recommendations.length === 0) {
+      recommendations.push({
+        type: 'General',
+        current: 'N/A',
+        recommended: 'N/A',
+        potentialSavings: '0%',
+        risk: 'Low',
+        reasoning: 'Current resource allocation appears to be appropriate based on utilization patterns.'
+      });
+    }
+    
+    return recommendations;
+  };
+
   // Initialize appId from URL params on component mount
   useEffect(() => {
     const urlAppId = searchParams.get('appId');
@@ -48,49 +89,46 @@ const AppOptimization = () => {
     setLoading(true);
     setError('');
     try {
-      // Mock API call - replace with actual backend endpoint
-      // const response = await axios.get(`/api/optimization/app/${id}`);
+      // Fetch real data from backend API
+      const response = await axios.get(`/api/resource-utilization/app/${id}`);
       
-      // Simulating API response for now
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const mockData = {
-        appId: id,
-        environment: 'production',
-        cpuRequest: '1000m',
-        cpuLimit: '2000m',
-        maxCpuUtilization: '45%',
-        avgCpuUtilization: '28%',
-        maxCpuUtilization30Days: '67%',
-        avgCpuUtilization30Days: '32%',
-        memoryRequest: '512Mi',
-        memoryLimit: '1Gi',
-        maxMemoryUtilization: '78%',
-        avgMemoryUtilization: '65%',
-        recommendations: [
-          {
-            type: 'CPU',
-            current: '1000m',
-            recommended: '600m',
-            potentialSavings: '40%',
-            risk: 'Low',
-            reasoning: 'Average utilization is 32% with peaks at 67%'
-          },
-          {
-            type: 'Memory',
-            current: '512Mi',
-            recommended: '384Mi',
-            potentialSavings: '25%',
-            risk: 'Medium',
-            reasoning: 'Average utilization is 65% with peaks at 78%'
-          }
-        ],
-        lastUpdated: new Date().toISOString()
-      };
-      
-      setAppData(mockData);
+      if (response.data && response.data.length > 0) {
+        const appData = response.data[0]; // Get the first matching app
+        
+        // Transform backend data to frontend format
+        const transformedData = {
+          appId: appData.app_id || id,
+          environment: appData.env || 'unknown',
+          cpuRequest: `${appData.req_cpu || 0}m`,
+          cpuLimit: `${(appData.req_cpu || 0) * 2}m`, // Assuming limit is 2x request
+          maxCpuUtilization: `${appData.max_cpu_utilz_percent || 0}%`,
+          avgCpuUtilization: `${appData.avg_cpu || 0}%`,
+          maxCpuUtilization30Days: `${appData.max_cpu_utilz_percent || 0}%`,
+          avgCpuUtilization30Days: `${appData.avg_cpu || 0}%`,
+          recommendations: generateRecommendations(appData),
+          lastUpdated: new Date().toISOString(),
+          // Additional backend fields
+          project: appData.project,
+          appName: appData.app_name,
+          tier: appData.tier,
+          prStatus: appData.pr_status,
+          prUrl: appData.pr_url
+        };
+        
+        setAppData(transformedData);
+      } else {
+        setError('Application not found. Please check the application ID and try again.');
+        setAppData(null);
+      }
     } catch (err) {
-      setError('Failed to fetch application data. Please check the application ID and try again.');
+      console.error('API Error:', err);
+      if (err.response?.status === 404) {
+        setError('Application not found. Please check the application ID and try again.');
+      } else if (err.response?.status === 500) {
+        setError('Backend service error. Please try again later.');
+      } else {
+        setError('Failed to fetch application data. Please check the application ID and try again.');
+      }
       setAppData(null);
     } finally {
       setLoading(false);
@@ -111,17 +149,34 @@ const AppOptimization = () => {
     
     try {
       setLoading(true);
-      // Mock API call for PR creation
-      // const response = await axios.post('/api/optimization/create-pr', {
-      //   appId: appData.appId,
-      //   recommendations: appData.recommendations
-      // });
       
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Create PR with real data
+      const prData = {
+        appId: appData.appId,
+        appName: appData.appName,
+        project: appData.project,
+        environment: appData.environment,
+        currentCpu: appData.cpuRequest,
+        recommendedCpu: appData.recommendations.find(r => r.type === 'CPU')?.recommended || appData.cpuRequest,
+        recommendations: appData.recommendations,
+        tier: appData.tier
+      };
       
-      alert('Pull Request created successfully! Check your Git repository for the changes.');
+      // Call backend API to create PR
+      const response = await axios.post('/api/optimization/create-pr', prData);
+      
+      if (response.data.success) {
+        alert(`Pull Request created successfully! PR URL: ${response.data.prUrl || 'Check your Git repository'}`);
+      } else {
+        alert('Pull Request creation failed. Please try again.');
+      }
     } catch (err) {
-      setError('Failed to create Pull Request. Please try again.');
+      console.error('PR Creation Error:', err);
+      if (err.response?.status === 500) {
+        setError('Backend service error during PR creation. Please try again later.');
+      } else {
+        setError('Failed to create Pull Request. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
