@@ -5,9 +5,8 @@ import CssBaseline from '@mui/material/CssBaseline';
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import ResourceUtilization from './pages/ResourceUtilization';
-import OptimizationRecommendations from './pages/OptimizationRecommendations';
-import PRStatusAnalysis from './pages/OptimizationHistory';
 import DatabaseManagement from './pages/DatabaseManagement';
+import AppOptimization from './pages/AppOptimization';
 import './App.css';
 
 const theme = createTheme({
@@ -31,10 +30,9 @@ function App() {
           <Navbar />
           <main style={{ padding: '20px', marginTop: '64px' }}>
             <Routes>
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/" element={<AppOptimization />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/resource-utilization" element={<ResourceUtilization />} />
-              <Route path="/optimization-recommendations" element={<OptimizationRecommendations />} />
-              <Route path="/optimization-history" element={<PRStatusAnalysis />} />
               <Route path="/database" element={<DatabaseManagement />} />
             </Routes>
           </main>
