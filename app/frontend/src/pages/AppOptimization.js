@@ -442,7 +442,7 @@ const AppOptimization = () => {
               <Typography variant="h6">CPU Over-Provisioning Analysis</Typography>
             </Box>
             
-            <Grid container spacing={4}>
+            <Grid container spacing={6}>
               <Grid item xs={12} md={6}>
                 <Typography variant="h6" gutterBottom align="center" color="primary">
                   Current State
@@ -456,8 +456,8 @@ const AppOptimization = () => {
                         cy="50%"
                         labelLine={false}
                         label={({ name, value }) => `${value}m`}
-                        outerRadius={120}
-                        innerRadius={40}
+                        outerRadius={100}
+                        innerRadius={30}
                         fill="#8884d8"
                         dataKey="value"
                       >
@@ -468,6 +468,8 @@ const AppOptimization = () => {
                       <Tooltip 
                         formatter={(value, name) => [`${value}m`, name]}
                         labelFormatter={(label) => `${label}`}
+                        contentStyle={{ zIndex: 1000 }}
+                        wrapperStyle={{ zIndex: 1000 }}
                       />
                       <Legend verticalAlign="bottom" height={36} />
                     </PieChart>
@@ -494,8 +496,8 @@ const AppOptimization = () => {
                         cy="50%"
                         labelLine={false}
                         label={({ name, value }) => `${value}m`}
-                        outerRadius={120}
-                        innerRadius={40}
+                        outerRadius={100}
+                        innerRadius={30}
                         fill="#8884d8"
                         dataKey="value"
                       >
@@ -506,6 +508,8 @@ const AppOptimization = () => {
                       <Tooltip 
                         formatter={(value, name) => [`${value}m`, name]}
                         labelFormatter={(label) => `${label}`}
+                        contentStyle={{ zIndex: 1000 }}
+                        wrapperStyle={{ zIndex: 1000 }}
                       />
                       <Legend verticalAlign="bottom" height={36} />
                     </PieChart>
