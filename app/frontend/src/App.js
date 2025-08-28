@@ -30,8 +30,8 @@ function App() {
           <Navbar />
           <main style={{ padding: '20px', marginTop: '64px' }}>
             <Routes>
-              <Route path="/" element={<AppOptimization />} />
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/app-optimization" element={<AppOptimization />} />
               <Route path="/resource-utilization" element={<ResourceUtilization />} />
               <Route path="/database" element={<DatabaseManagement />} />
             </Routes>
