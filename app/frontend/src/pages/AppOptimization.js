@@ -444,9 +444,16 @@ const AppOptimization = () => {
             
             <Grid container spacing={6}>
               <Grid item xs={12} md={6}>
-                <Typography variant="h6" gutterBottom align="center" color="primary">
-                  Current State
-                </Typography>
+                <Box textAlign="center" mb={2}>
+                  <Typography variant="h4" color="primary" gutterBottom>
+                    Current State
+                  </Typography>
+                  {appData && generatePieChartData(appData).currentData.length > 0 && (
+                    <Typography variant="h5" color="text.secondary">
+                      Total: {generatePieChartData(appData).currentData.reduce((sum, item) => sum + item.value, 0)}m
+                    </Typography>
+                  )}
+                </Box>
                 {appData && generatePieChartData(appData).currentData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={400}>
                     <PieChart>
@@ -455,7 +462,7 @@ const AppOptimization = () => {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, value }) => `${value}m`}
+                        label={({ name, value }) => `${name}\n${value}m`}
                         outerRadius={100}
                         innerRadius={30}
                         fill="#8884d8"
@@ -468,7 +475,7 @@ const AppOptimization = () => {
                       <Tooltip 
                         formatter={(value, name) => [`${value}m`, name]}
                         labelFormatter={(label) => `${label}`}
-                        contentStyle={{ zIndex: 1000 }}
+                        contentStyle={{ zIndex: 1000, fontSize: '14px', fontWeight: 'bold' }}
                         wrapperStyle={{ zIndex: 1000 }}
                       />
                       <Legend verticalAlign="bottom" height={36} />
@@ -484,9 +491,16 @@ const AppOptimization = () => {
               </Grid>
               
               <Grid item xs={12} md={6}>
-                <Typography variant="h6" gutterBottom align="center" color="success.main">
-                  After Optimization
-                </Typography>
+                <Box textAlign="center" mb={2}>
+                  <Typography variant="h4" color="success.main" gutterBottom>
+                    After Optimization
+                  </Typography>
+                  {appData && generatePieChartData(appData).recommendedData.length > 0 && (
+                    <Typography variant="h5" color="text.secondary">
+                      Total: {generatePieChartData(appData).recommendedData.reduce((sum, item) => sum + item.value, 0)}m
+                    </Typography>
+                  )}
+                </Box>
                 {appData && generatePieChartData(appData).recommendedData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={400}>
                     <PieChart>
@@ -495,7 +509,7 @@ const AppOptimization = () => {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, value }) => `${value}m`}
+                        label={({ name, value }) => `${name}\n${value}m`}
                         outerRadius={100}
                         innerRadius={30}
                         fill="#8884d8"
@@ -508,7 +522,7 @@ const AppOptimization = () => {
                       <Tooltip 
                         formatter={(value, name) => [`${value}m`, name]}
                         labelFormatter={(label) => `${label}`}
-                        contentStyle={{ zIndex: 1000 }}
+                        contentStyle={{ zIndex: 1000, fontSize: '14px', fontWeight: 'bold' }}
                         wrapperStyle={{ zIndex: 1000 }}
                       />
                       <Legend verticalAlign="bottom" height={36} />
