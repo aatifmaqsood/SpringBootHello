@@ -442,21 +442,22 @@ const AppOptimization = () => {
               <Typography variant="h6">CPU Over-Provisioning Analysis</Typography>
             </Box>
             
-            <Grid container spacing={3}>
+            <Grid container spacing={4}>
               <Grid item xs={12} md={6}>
                 <Typography variant="h6" gutterBottom align="center" color="primary">
                   Current State
                 </Typography>
                 {appData && generatePieChartData(appData).currentData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={400}>
                     <PieChart>
                       <Pie
                         data={generatePieChartData(appData).currentData}
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, value }) => `${name}: ${value}m`}
-                        outerRadius={80}
+                        label={({ name, value }) => `${value}m`}
+                        outerRadius={120}
+                        innerRadius={40}
                         fill="#8884d8"
                         dataKey="value"
                       >
@@ -468,11 +469,11 @@ const AppOptimization = () => {
                         formatter={(value, name) => [`${value}m`, name]}
                         labelFormatter={(label) => `${label}`}
                       />
-                      <Legend />
+                      <Legend verticalAlign="bottom" height={36} />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
-                  <Box display="flex" justifyContent="center" alignItems="center" height={300}>
+                  <Box display="flex" justifyContent="center" alignItems="center" height={400}>
                     <Typography variant="body2" color="text.secondary">
                       No data available for chart
                     </Typography>
@@ -485,15 +486,16 @@ const AppOptimization = () => {
                   After Optimization
                 </Typography>
                 {appData && generatePieChartData(appData).recommendedData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={400}>
                     <PieChart>
                       <Pie
                         data={generatePieChartData(appData).recommendedData}
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, value }) => `${name}: ${value}m`}
-                        outerRadius={80}
+                        label={({ name, value }) => `${value}m`}
+                        outerRadius={120}
+                        innerRadius={40}
                         fill="#8884d8"
                         dataKey="value"
                       >
@@ -505,11 +507,11 @@ const AppOptimization = () => {
                         formatter={(value, name) => [`${value}m`, name]}
                         labelFormatter={(label) => `${label}`}
                       />
-                      <Legend />
+                      <Legend verticalAlign="bottom" height={36} />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
-                  <Box display="flex" justifyContent="center" alignItems="center" height={300}>
+                  <Box display="flex" justifyContent="center" alignItems="center" height={400}>
                     <Typography variant="body2" color="text.secondary">
                       No data available for chart
                     </Typography>
