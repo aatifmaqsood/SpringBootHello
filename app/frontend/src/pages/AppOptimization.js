@@ -94,7 +94,12 @@ const AppOptimization = () => {
 
   // Generate pie chart data for CPU over-provisioning visualization
   const generatePieChartData = (appData) => {
-    if (!appData || !appData.req_cpu) return [];
+    if (!appData || !appData.req_cpu) {
+      return {
+        currentData: [],
+        recommendedData: []
+      };
+    }
     
     const currentCpu = appData.req_cpu;
     const maxCpuUsed = appData.maxCpu || 0;
@@ -408,58 +413,74 @@ const AppOptimization = () => {
                 <Typography variant="h6" gutterBottom align="center" color="primary">
                   Current State
                 </Typography>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={generatePieChartData(appData).currentData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, value }) => `${name}: ${value}m`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {generatePieChartData(appData).currentData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      formatter={(value, name) => [`${value}m`, name]}
-                      labelFormatter={(label) => `${label}`}
-                    />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+                {appData && generatePieChartData(appData).currentData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={generatePieChartData(appData).currentData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, value }) => `${name}: ${value}m`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {generatePieChartData(appData).currentData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value, name) => [`${value}m`, name]}
+                        labelFormatter={(label) => `${label}`}
+                      />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <Box display="flex" justifyContent="center" alignItems="center" height={300}>
+                    <Typography variant="body2" color="text.secondary">
+                      No data available for chart
+                    </Typography>
+                  </Box>
+                )}
               </Grid>
               
               <Grid item xs={12} md={6}>
                 <Typography variant="h6" gutterBottom align="center" color="success.main">
                   After Optimization
                 </Typography>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={generatePieChartData(appData).recommendedData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, value }) => `${name}: ${value}m`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {generatePieChartData(appData).recommendedData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      formatter={(value, name) => [`${value}m`, name]}
-                      labelFormatter={(label) => `${label}`}
-                    />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+                {appData && generatePieChartData(appData).recommendedData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={generatePieChartData(appData).recommendedData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, value }) => `${name}: ${value}m`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {generatePieChartData(appData).recommendedData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value, name) => [`${value}m`, name]}
+                        labelFormatter={(label) => `${label}`}
+                      />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <Box display="flex" justifyContent="center" alignItems="center" height={300}>
+                    <Typography variant="body2" color="text.secondary">
+                      No data available for chart
+                    </Typography>
+                  </Box>
+                )}
               </Grid>
             </Grid>
             
