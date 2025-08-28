@@ -4,14 +4,14 @@ import { Link, useLocation } from 'react-router-dom';
 import StorageIcon from '@mui/icons-material/Storage';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import AssessmentIcon from '@mui/icons-material/Assessment';
-import BuildIcon from '@mui/icons-material/Build';
+import SearchIcon from '@mui/icons-material/Search';
 
 const Navbar = () => {
   const location = useLocation();
 
   const navItems = [
-    { path: '/', label: 'App Optimization', icon: <BuildIcon /> },
-    { path: '/dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
+    { path: '/', label: 'Dashboard', icon: <DashboardIcon /> },
+    { path: '/app-optimization', label: 'App Optimization', icon: <SearchIcon /> },
     { path: '/resource-utilization', label: 'Resource Utilization', icon: <AssessmentIcon /> },
     { path: '/database', label: 'Database', icon: <StorageIcon /> },
   ];
