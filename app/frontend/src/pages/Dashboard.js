@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Grid,
   Card,
@@ -27,6 +28,7 @@ import {
 import axios from 'axios';
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [data, setData] = useState({
     resourceUtilization: [],
     summary: {}
@@ -170,6 +172,78 @@ const Dashboard = () => {
                  `${(data.resourceUtilization.reduce((sum, app) => sum + parseFloat(app.max_cpu_utilz_percent || 0), 0) / data.resourceUtilization.length).toFixed(1)}%` :
                  '0%'}
               </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Quick Actions */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Quick Actions
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={4}>
+                  <Card 
+                    variant="outlined" 
+                    sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' } }}
+                    onClick={() => navigate('/')}
+                  >
+                    <CardContent>
+                      <Typography variant="subtitle1" gutterBottom>
+                        🚀 App Optimization
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary" paragraph>
+                        Search and optimize specific applications by ID
+                      </Typography>
+                      <Typography variant="body2" color="primary">
+                        Go to App Optimization →
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <Card 
+                    variant="outlined" 
+                    sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' } }}
+                    onClick={() => navigate('/resource-utilization')}
+                  >
+                    <CardContent>
+                      <Typography variant="subtitle1" gutterBottom>
+                        📊 Resource Analysis
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary" paragraph>
+                        View comprehensive resource utilization data
+                      </Typography>
+                      <Typography variant="body2" color="primary">
+                        View Resource Utilization →
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <Card 
+                    variant="outlined" 
+                    sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' } }}
+                    onClick={() => navigate('/optimization-history')}
+                  >
+                    <CardContent>
+                      <Typography variant="subtitle1" gutterBottom>
+                        📈 Optimization History
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary" paragraph>
+                        Track optimization recommendations and PR status
+                      </Typography>
+                      <Typography variant="body2" color="primary">
+                        View History →
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
             </CardContent>
           </Card>
         </Grid>
