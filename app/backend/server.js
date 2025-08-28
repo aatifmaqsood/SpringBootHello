@@ -77,6 +77,17 @@ app.get('/api/resource-utilization/project/:project', async (req, res) => {
     }
 });
 
+// Get resource utilization by application ID
+app.get('/api/resource-utilization/app/:appId', async (req, res) => {
+    try {
+        const data = await dbService.getResourceUtilizationByAppId(req.params.appId);
+        res.json(data);
+    } catch (error) {
+        console.error('Application-specific fetch error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.get('/api/overprovisioned-apps', async (req, res) => {
     try {
         const threshold = req.query.threshold || 80;
@@ -98,6 +109,40 @@ app.get('/api/optimization-recommendations', async (req, res) => {
     }
 });
 
+// Create optimization PR
+app.post('/api/optimization/create-pr', async (req, res) => {
+    try {
+        const { appId, appName, project, environment, currentCpu, recommendedCpu, recommendations, tier } = req.body;
+        
+        // Store PR creation request in database
+        const prData = await dbService.createOptimizationPR({
+            appId,
+            appName,
+            project,
+            environment,
+            currentCpu,
+            recommendedCpu,
+            recommendations,
+            tier,
+            status: 'pending',
+            createdAt: new Date()
+        });
+        
+        res.json({
+            success: true,
+            message: 'PR creation request submitted successfully',
+            prId: prData.id,
+            prUrl: prData.prUrl || null
+        });
+    } catch (error) {
+        console.error('PR creation error:', error);
+        res.status(500).json({ 
+            success: false,
+            error: error.message 
+        });
+    }
+});
+
 // New endpoints for project and environment statistics
 app.get('/api/projects/stats', async (req, res) => {
     try {
@@ -115,6 +160,51 @@ app.get('/api/environments/stats', async (req, res) => {
         res.json(data);
     } catch (error) {
         console.error('Environment stats fetch error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// New PR Status APIs
+app.get('/api/prs/status', async (req, res) => {
+    try {
+        const { status, project, environment } = req.query;
+        const data = await dbService.getPRsByStatus(status, project, environment);
+        res.json(data);
+    } catch (error) {
+        console.error('PR status fetch error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/prs/open', async (req, res) => {
+    try {
+        const { project, environment } = req.query;
+        const data = await dbService.getOpenPRs(project, environment);
+        res.json(data);
+    } catch (error) {
+        console.error('Open PRs fetch error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/prs/merged', async (req, res) => {
+    try {
+        const { project, environment } = req.query;
+        const data = await dbService.getMergedPRs(project, environment);
+        res.json(data);
+    } catch (error) {
+        console.error('Merged PRs fetch error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/prs/count', async (req, res) => {
+    try {
+        const { project, environment } = req.query;
+        const data = await dbService.getPRCounts(project, environment);
+        res.json(data);
+    } catch (error) {
+        console.error('PR count fetch error:', error);
         res.status(500).json({ error: error.message });
     }
 });
