@@ -24,6 +24,7 @@ import {
   Create as CreateIcon,
   Refresh as RefreshIcon
 } from '@mui/icons-material';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 const AppOptimization = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -60,6 +61,22 @@ const AppOptimization = () => {
       }
     }
     
+    // Add new_req_cpu recommendation if available
+    if (appData.new_req_cpu && appData.req_cpu && appData.new_req_cpu !== appData.req_cpu) {
+      const currentCpu = appData.req_cpu;
+      const newReqCpu = appData.new_req_cpu;
+      const potentialSavings = Math.round(((currentCpu - newReqCpu) / currentCpu) * 100);
+      
+      recommendations.push({
+        type: 'CPU (System Recommended)',
+        current: `${currentCpu}m`,
+        recommended: `${newReqCpu}m`,
+        potentialSavings: `${potentialSavings}%`,
+        risk: potentialSavings > 50 ? 'High' : potentialSavings > 30 ? 'Medium' : 'Low',
+        reasoning: `System analysis suggests reducing CPU from ${currentCpu}m to ${newReqCpu}m based on historical usage patterns.`
+      });
+    }
+    
     // If no specific recommendations, provide general guidance
     if (recommendations.length === 0) {
       recommendations.push({
@@ -73,6 +90,34 @@ const AppOptimization = () => {
     }
     
     return recommendations;
+  };
+
+  // Generate pie chart data for CPU over-provisioning visualization
+  const generatePieChartData = (appData) => {
+    if (!appData || !appData.req_cpu) return [];
+    
+    const currentCpu = appData.req_cpu;
+    const maxCpuUsed = appData.maxCpu || 0;
+    const recommendedCpu = appData.newReqCpu || appData.req_cpu;
+    
+    // Calculate over-provisioned amount
+    const overProvisioned = Math.max(0, currentCpu - maxCpuUsed);
+    const utilized = Math.min(maxCpuUsed, currentCpu);
+    
+    // Data for current state
+    const currentData = [
+      { name: 'Utilized CPU', value: utilized, fill: '#4caf50' },
+      { name: 'Over-Provisioned', value: overProvisioned, fill: '#ff9800' }
+    ];
+    
+    // Data for recommended state
+    const recommendedData = [
+      { name: 'Utilized CPU', value: utilized, fill: '#4caf50' },
+      { name: 'Buffer (20%)', value: Math.ceil(utilized * 0.2), fill: '#2196f3' },
+      { name: 'Savings', value: Math.max(0, currentCpu - recommendedCpu), fill: '#f44336' }
+    ];
+    
+    return { currentData, recommendedData };
   };
 
   // Initialize appId from URL params on component mount
@@ -105,6 +150,10 @@ const AppOptimization = () => {
           avgCpuUtilization: `${appData.avg_cpu || 0}%`,
           maxCpuUtilization30Days: `${appData.max_cpu_utilz_percent || 0}%`,
           avgCpuUtilization30Days: `${appData.avg_cpu || 0}%`,
+          // Add max_cpu and avg_cpu values from database
+          maxCpu: appData.max_cpu || 0,
+          avgCpu: appData.avg_cpu || 0,
+          newReqCpu: appData.new_req_cpu || 0,
           recommendations: generateRecommendations(appData),
           lastUpdated: new Date().toISOString(),
           // Additional backend fields
@@ -285,7 +334,7 @@ const AppOptimization = () => {
           {/* Resource Metrics */}
           <Grid container spacing={3} sx={{ mb: 3 }}>
             {/* CPU Metrics */}
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12}>
               <Card>
                 <CardContent>
                   <Box display="flex" alignItems="center" mb={2}>
@@ -311,7 +360,23 @@ const AppOptimization = () => {
                     </Grid>
                     <Grid item xs={6}>
                       <Typography variant="body2" color="text.secondary">
-                        Max (30 days)
+                        Max CPU Usage
+                      </Typography>
+                      <Typography variant="h6" color="warning.main">
+                        {appData.maxCpu}m
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="text.secondary">
+                        Avg CPU Usage
+                      </Typography>
+                      <Typography variant="h6" color="info.main">
+                        {appData.avgCpu}m
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="text.secondary">
+                        Max Utilization %
                       </Typography>
                       <Typography variant="h6" color="warning.main">
                         {appData.maxCpuUtilization30Days}
@@ -319,7 +384,7 @@ const AppOptimization = () => {
                     </Grid>
                     <Grid item xs={6}>
                       <Typography variant="body2" color="text.secondary">
-                        Average (30 days)
+                        Avg Utilization %
                       </Typography>
                       <Typography variant="h6" color="info.main">
                         {appData.avgCpuUtilization30Days}
@@ -329,53 +394,83 @@ const AppOptimization = () => {
                 </CardContent>
               </Card>
             </Grid>
-
-            {/* Memory Metrics */}
-            <Grid item xs={12} md={6}>
-              <Card>
-                <CardContent>
-                  <Box display="flex" alignItems="center" mb={2}>
-                    <MemoryIcon color="primary" sx={{ mr: 1 }} />
-                    <Typography variant="h6">Memory Utilization</Typography>
-                  </Box>
-                  <Grid container spacing={2}>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">
-                        Current Request
-                      </Typography>
-                      <Typography variant="h6">
-                        {appData.memoryRequest}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">
-                        Current Limit
-                      </Typography>
-                      <Typography variant="h6">
-                        {appData.memoryLimit}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">
-                        Max (30 days)
-                      </Typography>
-                      <Typography variant="h6" color="warning.main">
-                        {appData.maxMemoryUtilization}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">
-                        Average (30 days)
-                      </Typography>
-                      <Typography variant="h6" color="info.main">
-                        {appData.avgMemoryUtilization}
-                      </Typography>
-                    </Grid>
-                  </Grid>
-                </CardContent>
-              </Card>
-            </Grid>
           </Grid>
+
+          {/* CPU Over-Provisioning Visualization */}
+          <Paper sx={{ p: 3, mb: 3 }}>
+            <Box display="flex" alignItems="center" mb={3}>
+              <TrendingUpIcon color="primary" sx={{ mr: 1 }} />
+              <Typography variant="h6">CPU Over-Provisioning Analysis</Typography>
+            </Box>
+            
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Typography variant="h6" gutterBottom align="center" color="primary">
+                  Current State
+                </Typography>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={generatePieChartData(appData).currentData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, value }) => `${name}: ${value}m`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {generatePieChartData(appData).currentData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value, name) => [`${value}m`, name]}
+                      labelFormatter={(label) => `${label}`}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <Typography variant="h6" gutterBottom align="center" color="success.main">
+                  After Optimization
+                </Typography>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={generatePieChartData(appData).recommendedData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, value }) => `${name}: ${value}m`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {generatePieChartData(appData).recommendedData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value, name) => [`${value}m`, name]}
+                      labelFormatter={(label) => `${label}`}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Grid>
+            </Grid>
+            
+            <Box mt={2} p={2} bgcolor="grey.50" borderRadius={1}>
+              <Typography variant="body2" color="text.secondary">
+                <strong>Current State:</strong> Shows how much CPU is actually utilized vs. over-provisioned.
+                <br />
+                <strong>After Optimization:</strong> Shows the recommended allocation with buffer and potential savings.
+              </Typography>
+            </Box>
+          </Paper>
 
           {/* Recommendations */}
           <Paper sx={{ p: 3 }}>
